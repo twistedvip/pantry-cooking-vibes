@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# AI folders
+.omc/
+
+# Virtual environments
+.venv/
+venv/
+env/
+activate/
+
+# uv
+.uv/
+
+# SQLite DB
+data/app.*
+data/app.db
+db_backups/
+
+# Raw scraped data (large)
+data/raw/
+
+# Logs
+*.log
+scrape.log
+
+# Recon notes (reference only)
+recon/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/

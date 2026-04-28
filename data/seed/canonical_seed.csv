@@ -1,0 +1,485 @@
+name,category,default_unit,aliases
+chicken breast,protein,oz,chicken|boneless chicken|skinless chicken breast
+chicken thigh,protein,oz,chicken thighs|bone-in chicken thigh
+ground beef,protein,oz,beef mince|minced beef|hamburger meat
+ground turkey,protein,oz,turkey mince|minced turkey
+ground pork,protein,oz,pork mince|minced pork
+beef sirloin,protein,oz,sirloin steak|sirloin
+beef tenderloin,protein,oz,tenderloin steak|filet mignon
+pork tenderloin,protein,oz,pork loin|pork fillet
+pork chop,protein,oz,pork chops|bone-in pork chop
+bacon,protein,slice,streaky bacon|rashers
+ham,protein,oz,deli ham|cooked ham
+sausage,protein,link,pork sausage|breakfast sausage|links
+lamb chop,protein,oz,lamb loin chop|lamb cutlet
+ground lamb,protein,oz,minced lamb|lamb mince
+turkey breast,protein,oz,turkey cutlet|sliced turkey
+steak,protein,oz,beef steak|strip steak|ribeye
+brisket,protein,oz,beef brisket|flat brisket
+short ribs,protein,oz,beef short ribs|braising ribs
+salmon fillet,protein,oz,salmon|atlantic salmon|pacific salmon
+tuna,protein,oz,canned tuna|albacore tuna|yellowfin tuna
+tilapia,protein,oz,tilapia fillet
+cod fillet,protein,oz,cod|atlantic cod
+shrimp,protein,oz,prawns|jumbo shrimp|large shrimp
+scallops,protein,oz,sea scallops|bay scallops
+crab,protein,oz,crab meat|lump crab|dungeness crab
+lobster,protein,oz,lobster tail|maine lobster
+halibut,protein,oz,halibut fillet
+mahi mahi,protein,oz,dolphinfish|mahi
+sardines,protein,oz,canned sardines|sardine fillets
+anchovies,protein,oz,anchovy fillets|canned anchovies
+clams,protein,oz,littleneck clams|cherrystone clams
+mussels,protein,oz,blue mussels
+oysters,protein,oz,fresh oysters|shucked oysters
+egg,protein,whole,eggs|large egg|chicken egg
+egg white,protein,whole,egg whites|liquid egg whites
+tofu,protein,oz,firm tofu|silken tofu|bean curd
+tempeh,protein,oz,fermented soy
+seitan,protein,oz,wheat gluten|wheat meat
+edamame,protein,cup,edamame beans|soybeans|fresh soybeans
+broccoli,vegetable,cup,broccoli florets|brocoli
+spinach,vegetable,cup,baby spinach|fresh spinach|spinach leaves
+kale,vegetable,cup,curly kale|lacinato kale|tuscan kale|dinosaur kale
+carrot,vegetable,whole,carrots|baby carrots|carrot sticks
+celery,vegetable,stalk,celery stalks|celery sticks
+onion,vegetable,whole,yellow onion|white onion|brown onion
+red onion,vegetable,whole,purple onion
+garlic,vegetable,clove,garlic cloves|fresh garlic
+bell pepper,vegetable,whole,sweet pepper|capsicum|red bell pepper|green bell pepper|yellow bell pepper
+tomato,vegetable,whole,roma tomato|beefsteak tomato|fresh tomato
+cherry tomato,vegetable,cup,grape tomatoes|cherry tomatoes
+cucumber,vegetable,whole,english cucumber|seedless cucumber
+zucchini,vegetable,whole,courgette|summer squash|zucchini squash
+eggplant,vegetable,whole,aubergine|brinjal
+asparagus,vegetable,spear,asparagus spears|fresh asparagus
+green bean,vegetable,cup,green beans|string beans|snap beans|french beans
+pea,vegetable,cup,green peas|sweet peas|garden peas
+corn,vegetable,ear,sweet corn|corn on the cob|maize
+butternut squash,vegetable,cup,butternut pumpkin|squash
+acorn squash,vegetable,whole,acorn pumpkin
+spaghetti squash,vegetable,whole,vegetable spaghetti
+sweet potato,vegetable,whole,yam|sweet yam|orange sweet potato
+potato,vegetable,whole,russet potato|white potato|baking potato|yukon gold
+cauliflower,vegetable,cup,cauliflower florets
+brussels sprouts,vegetable,cup,brussel sprouts|baby cabbage
+cabbage,vegetable,head,green cabbage|white cabbage
+red cabbage,vegetable,head,purple cabbage
+bok choy,vegetable,head,pak choi|chinese cabbage|baby bok choy
+mushroom,vegetable,cup,button mushroom|white mushroom|cremini mushroom
+portobello mushroom,vegetable,whole,portabella mushroom|portobello cap
+shiitake mushroom,vegetable,cup,shiitake|dried shiitake
+artichoke,vegetable,whole,globe artichoke|hearts of artichoke
+fennel,vegetable,bulb,fennel bulb|anise fennel
+leek,vegetable,whole,leeks
+shallot,vegetable,whole,shallots|french shallot
+scallion,vegetable,whole,green onion|spring onion|scallions
+radish,vegetable,whole,red radish|daikon radish
+beet,vegetable,whole,beetroot|red beet|golden beet
+turnip,vegetable,whole,white turnip
+parsnip,vegetable,whole,parsnips
+arugula,vegetable,cup,rocket|rucola|arugula leaves
+romaine lettuce,vegetable,head,romaine|cos lettuce
+iceberg lettuce,vegetable,head,iceberg|crisphead lettuce
+mixed greens,vegetable,cup,salad greens|mesclun|spring mix
+swiss chard,vegetable,cup,chard|rainbow chard
+collard greens,vegetable,cup,collards
+watercress,vegetable,cup,garden cress
+jalapeno,vegetable,whole,jalapeno pepper|fresh jalapeno|chili pepper
+serrano pepper,vegetable,whole,serrano chili
+poblano pepper,vegetable,whole,poblano|ancho pepper fresh
+snap pea,vegetable,cup,sugar snap pea|snap peas
+snow pea,vegetable,cup,snow peas|mangetout
+apple,fruit,whole,gala apple|fuji apple|granny smith|honeycrisp
+banana,fruit,whole,bananas|ripe banana
+orange,fruit,whole,navel orange|mandarin|clementine
+lemon,fruit,whole,lemons|fresh lemon
+lime,fruit,whole,limes|fresh lime|key lime
+grapefruit,fruit,whole,pink grapefruit|ruby red grapefruit
+strawberry,fruit,cup,strawberries|fresh strawberries
+blueberry,fruit,cup,blueberries|fresh blueberries
+raspberry,fruit,cup,raspberries|fresh raspberries
+blackberry,fruit,cup,blackberries|fresh blackberries
+grape,fruit,cup,grapes|red grapes|green grapes|seedless grapes
+mango,fruit,whole,mangoes|ataulfo mango|kent mango
+pineapple,fruit,cup,fresh pineapple|pineapple chunks
+watermelon,fruit,cup,fresh watermelon|seedless watermelon
+cantaloupe,fruit,cup,rockmelon|muskmelon
+honeydew,fruit,cup,honeydew melon
+peach,fruit,whole,peaches|fresh peach|nectarine
+pear,fruit,whole,pears|bosc pear|bartlett pear
+plum,fruit,whole,plums|fresh plum
+cherry,fruit,cup,cherries|fresh cherries|bing cherry
+kiwi,fruit,whole,kiwifruit|chinese gooseberry
+avocado,fruit,whole,haas avocado|fresh avocado
+pomegranate,fruit,whole,pomegranate arils|pom seeds
+fig,fruit,whole,fresh fig|black mission fig
+date,fruit,whole,medjool date|dates|dried dates
+coconut,fruit,cup,fresh coconut|coconut meat|shredded coconut
+passion fruit,fruit,whole,passionfruit|maracuja
+papaya,fruit,cup,pawpaw|fresh papaya
+guava,fruit,whole,fresh guava
+white rice,grain,cup,long grain rice|basmati rice|rice
+brown rice,grain,cup,whole grain rice
+quinoa,grain,cup,white quinoa|red quinoa|tri-color quinoa
+rolled oats,grain,cup,old fashioned oats|oatmeal|oats
+steel cut oats,grain,cup,irish oats|pinhead oats
+whole wheat bread,grain,slice,whole grain bread|wheat bread
+white bread,grain,slice,sandwich bread|soft bread
+sourdough bread,grain,slice,sourdough loaf|sourdough
+pasta,grain,oz,spaghetti|penne|rigatoni|fusilli|farfalle
+whole wheat pasta,grain,oz,whole grain pasta|whole wheat spaghetti
+egg noodles,grain,oz,egg pasta|wide noodles
+rice noodles,grain,oz,vermicelli|pad thai noodles|rice vermicelli
+farro,grain,cup,emmer wheat|farro grain
+barley,grain,cup,pearl barley|whole barley
+bulgur wheat,grain,cup,bulgur|cracked wheat
+couscous,grain,cup,moroccan couscous|israeli couscous|pearl couscous
+polenta,grain,cup,cornmeal mush|grits
+cornmeal,grain,cup,corn flour|masa|fine cornmeal
+flour tortilla,grain,whole,wheat tortilla|burrito tortilla|soft tortilla
+corn tortilla,grain,whole,tortilla|corn wrap
+all purpose flour,grain,cup,plain flour|white flour|ap flour
+whole wheat flour,grain,cup,whole grain flour|wheat flour
+bread flour,grain,cup,strong flour|high gluten flour
+rice flour,grain,cup,white rice flour|gluten free flour
+almond flour,grain,cup,almond meal|blanched almond flour
+panko breadcrumbs,grain,cup,panko|japanese breadcrumbs
+breadcrumbs,grain,cup,dry breadcrumbs|seasoned breadcrumbs
+granola,grain,cup,muesli|crunchy granola
+popcorn,grain,cup,popped corn|microwave popcorn
+millet,grain,cup,millet grain
+amaranth,grain,cup,amaranth grain
+buckwheat,grain,cup,buckwheat groats|kasha
+teff,grain,cup,teff grain|ethiopian teff
+spelt,grain,cup,spelt grain|dinkel wheat
+whole milk,dairy,cup,milk|dairy milk|full fat milk|cow's milk
+skim milk,dairy,cup,nonfat milk|fat free milk|2% milk
+heavy cream,dairy,cup,heavy whipping cream|double cream|whipping cream
+half and half,dairy,cup,half & half|light cream
+butter,dairy,tbsp,unsalted butter|salted butter|dairy butter
+cream cheese,dairy,oz,full fat cream cheese|philadelphia
+sour cream,dairy,cup,full fat sour cream
+plain yogurt,dairy,cup,yogurt|whole milk yogurt
+greek yogurt,dairy,cup,plain greek yogurt|strained yogurt
+cottage cheese,dairy,cup,small curd cottage cheese|large curd
+ricotta cheese,dairy,cup,whole milk ricotta|part skim ricotta
+mozzarella cheese,dairy,oz,fresh mozzarella|low moisture mozzarella|part skim mozzarella
+cheddar cheese,dairy,oz,sharp cheddar|mild cheddar|aged cheddar
+parmesan cheese,dairy,oz,parmigiano reggiano|grated parmesan|pecorino romano
+feta cheese,dairy,oz,crumbled feta|greek feta
+goat cheese,dairy,oz,chevre|fresh goat cheese
+swiss cheese,dairy,oz,emmental|jarlsberg
+monterey jack cheese,dairy,oz,jack cheese|pepper jack
+brie,dairy,oz,brie cheese|camembert
+blue cheese,dairy,oz,gorgonzola|roquefort|stilton
+black beans,legume,cup,canned black beans|dried black beans|turtle beans
+chickpeas,legume,cup,garbanzo beans|canned chickpeas|dried chickpeas
+lentils,legume,cup,green lentils|red lentils|french lentils|beluga lentils
+kidney beans,legume,cup,red kidney beans|canned kidney beans
+pinto beans,legume,cup,canned pinto beans|dried pinto beans
+navy beans,legume,cup,white beans|cannellini beans|great northern beans
+black-eyed peas,legume,cup,black eyed beans|cowpeas
+split peas,legume,cup,yellow split peas|green split peas
+lima beans,legume,cup,butter beans|dried lima beans
+fava beans,legume,cup,broad beans|faba beans
+mung beans,legume,cup,moong dal|green mung beans
+adzuki beans,legume,cup,azuki beans|red beans
+soybeans,legume,cup,dried soybeans|whole soybeans
+hummus,legume,tbsp,store bought hummus|homemade hummus
+peanut butter,legume,tbsp,natural peanut butter|creamy peanut butter|crunchy peanut butter
+peanuts,legume,oz,roasted peanuts|dry roasted peanuts|raw peanuts
+almonds,nut,oz,raw almonds|roasted almonds|sliced almonds|slivered almonds
+walnuts,nut,oz,walnut halves|english walnuts|black walnuts
+cashews,nut,oz,raw cashews|roasted cashews
+pecans,nut,oz,pecan halves|chopped pecans
+pistachios,nut,oz,shelled pistachios|roasted pistachios
+macadamia nuts,nut,oz,macadamia|hawaiian nuts
+hazelnuts,nut,oz,filberts|hazelnut halves
+pine nuts,nut,oz,pignoli|pinon nuts
+brazil nuts,nut,oz,para nuts
+almond butter,nut,tbsp,natural almond butter|raw almond butter
+cashew butter,nut,tbsp,raw cashew butter
+chia seeds,seed,tbsp,chia|white chia seeds|black chia seeds
+flaxseeds,seed,tbsp,flax seeds|ground flax|golden flaxseed|linseed
+hemp seeds,seed,tbsp,hemp hearts|shelled hemp seeds
+sunflower seeds,seed,oz,sunflower kernels|roasted sunflower seeds
+pumpkin seeds,seed,oz,pepitas|hulled pumpkin seeds
+sesame seeds,seed,tbsp,white sesame seeds|black sesame seeds|til
+poppy seeds,seed,tbsp,blue poppy seeds
+tahini,seed,tbsp,sesame paste|sesame seed butter
+olive oil,fat,tbsp,extra virgin olive oil|evoo|light olive oil
+vegetable oil,fat,tbsp,canola oil|neutral oil|soybean oil
+coconut oil,fat,tbsp,virgin coconut oil|refined coconut oil
+avocado oil,fat,tbsp,refined avocado oil
+sesame oil,fat,tbsp,toasted sesame oil|dark sesame oil
+ghee,fat,tbsp,clarified butter|desi ghee
+lard,fat,tbsp,pork fat|rendered lard
+mayonnaise,fat,tbsp,mayo|hellmans|best foods
+ranch dressing,fat,tbsp,ranch|buttermilk ranch dressing
+caesar dressing,fat,tbsp,caesar salad dressing
+vinaigrette,fat,tbsp,italian dressing|balsamic vinaigrette
+basil,herb,cup,fresh basil|sweet basil|thai basil|basil leaves
+cilantro,herb,cup,coriander|fresh coriander|chinese parsley
+parsley,herb,cup,flat leaf parsley|curly parsley|fresh parsley
+mint,herb,cup,fresh mint|spearmint|peppermint leaves
+thyme,herb,sprig,fresh thyme|common thyme|thyme sprigs
+rosemary,herb,sprig,fresh rosemary|rosemary sprigs
+oregano,herb,sprig,fresh oregano|greek oregano
+sage,herb,leaf,fresh sage|garden sage|sage leaves
+chives,herb,tbsp,fresh chives|chive stems
+dill,herb,tbsp,fresh dill|dill weed
+tarragon,herb,tbsp,fresh tarragon|french tarragon
+bay leaf,herb,whole,bay leaves|laurel leaf|fresh bay leaf
+lemongrass,herb,stalk,lemon grass|lemongrass stalk
+fresh ginger,herb,tsp,ginger root|minced ginger|ginger
+fresh turmeric,herb,tsp,turmeric root
+salt,spice,tsp,kosher salt|sea salt|table salt|fine salt
+black pepper,spice,tsp,ground black pepper|cracked pepper|peppercorns
+cumin,spice,tsp,ground cumin|cumin seeds
+paprika,spice,tsp,sweet paprika|smoked paprika|hungarian paprika
+chili powder,spice,tsp,chili seasoning|tex mex chili powder
+garlic powder,spice,tsp,granulated garlic
+onion powder,spice,tsp,granulated onion|onion flakes
+cayenne pepper,spice,tsp,cayenne|red pepper powder|ground cayenne
+cinnamon,spice,tsp,ground cinnamon|ceylon cinnamon|cassia cinnamon
+nutmeg,spice,tsp,ground nutmeg|whole nutmeg
+ground ginger,spice,tsp,ginger powder|dried ginger
+turmeric powder,spice,tsp,ground turmeric|haldi
+coriander powder,spice,tsp,ground coriander
+cardamom,spice,tsp,ground cardamom|cardamom pods
+cloves,spice,tsp,ground cloves|whole cloves
+allspice,spice,tsp,ground allspice|pimento
+dried bay leaves,spice,whole,bay leaves|turkish bay leaves
+dried oregano,spice,tsp,oregano flakes|mediterranean oregano
+dried thyme,spice,tsp,thyme leaves|dried thyme leaves
+dried basil,spice,tsp,basil flakes|italian basil dried
+dried rosemary,spice,tsp,rosemary flakes|crushed rosemary
+red pepper flakes,spice,tsp,crushed red pepper|chili flakes|red chili flakes
+fennel seeds,spice,tsp,whole fennel seeds
+mustard powder,spice,tsp,dry mustard|ground mustard
+curry powder,spice,tsp,madras curry powder|mild curry powder
+garam masala,spice,tsp,indian spice blend|masala
+italian seasoning,spice,tsp,italian herbs|mixed italian herbs
+everything bagel seasoning,spice,tsp,everything seasoning|bagel seasoning
+Old Bay seasoning,spice,tsp,old bay|seafood seasoning
+soy sauce,condiment,tbsp,shoyu|tamari|light soy sauce|low sodium soy sauce
+hot sauce,condiment,tbsp,tabasco|frank's red hot|louisiana hot sauce
+sriracha,condiment,tbsp,rooster sauce|huy fong sriracha|sriracha sauce
+ketchup,condiment,tbsp,catsup|tomato ketchup
+yellow mustard,condiment,tbsp,mustard|american mustard
+dijon mustard,condiment,tbsp,french mustard|grey poupon
+worcestershire sauce,condiment,tbsp,worcestershire|lea and perrins
+fish sauce,condiment,tbsp,nam pla|thai fish sauce|vietnamese fish sauce
+oyster sauce,condiment,tbsp,chinese oyster sauce
+hoisin sauce,condiment,tbsp,chinese barbecue sauce
+coconut aminos,condiment,tbsp,soy free soy sauce alternative
+apple cider vinegar,condiment,tbsp,acv|raw apple cider vinegar
+white wine vinegar,condiment,tbsp,white vinegar
+red wine vinegar,condiment,tbsp,red wine vinegar
+balsamic vinegar,condiment,tbsp,balsamic|aged balsamic
+rice wine vinegar,condiment,tbsp,rice vinegar|seasoned rice vinegar
+honey,condiment,tbsp,raw honey|clover honey|manuka honey
+maple syrup,condiment,tbsp,pure maple syrup|grade a maple syrup
+agave nectar,condiment,tbsp,agave syrup|blue agave
+miso paste,condiment,tbsp,white miso|red miso|shiro miso
+tomato sauce,condiment,cup,marinara sauce|pasta sauce|tomato pasta sauce
+salsa,condiment,cup,fresh salsa|pico de gallo|chunky salsa
+guacamole,condiment,cup,guac|avocado dip
+pesto,condiment,tbsp,basil pesto|store bought pesto
+bbq sauce,condiment,tbsp,barbecue sauce|sweet baby rays
+teriyaki sauce,condiment,tbsp,teriyaki marinade
+coconut milk,condiment,cup,canned coconut milk|light coconut milk|full fat coconut milk
+chicken broth,condiment,cup,chicken stock|broth|low sodium chicken broth
+vegetable broth,condiment,cup,vegetable stock|veggie broth
+beef broth,condiment,cup,beef stock|low sodium beef broth
+tomato paste,condiment,tbsp,double concentrated tomato paste
+canned tomatoes,condiment,cup,crushed tomatoes|diced tomatoes|whole peeled tomatoes
+granulated sugar,baking,cup,white sugar|sugar|cane sugar
+brown sugar,baking,cup,light brown sugar|dark brown sugar|packed brown sugar
+powdered sugar,baking,cup,confectioners sugar|icing sugar
+baking powder,baking,tsp,double acting baking powder
+baking soda,baking,tsp,bicarbonate of soda|bicarb
+active dry yeast,baking,tsp,yeast|instant yeast|bread yeast
+vanilla extract,baking,tsp,pure vanilla extract|vanilla essence
+cocoa powder,baking,cup,unsweetened cocoa|dutch process cocoa|raw cacao
+chocolate chips,baking,cup,semi sweet chocolate chips|dark chocolate chips|mini chocolate chips
+dark chocolate,baking,oz,bittersweet chocolate|70% dark chocolate
+milk chocolate,baking,oz,milk chocolate bar|milk chocolate pieces
+white chocolate,baking,oz,white chocolate chips|white chocolate bar
+cream of tartar,baking,tsp,potassium bitartrate|tartaric acid
+cornstarch,baking,tbsp,corn flour|maize starch|cornflour
+arrowroot powder,baking,tbsp,arrowroot starch|arrowroot flour
+gelatin,baking,tsp,unflavored gelatin|gelatin powder|agar agar
+molasses,baking,tbsp,blackstrap molasses|dark molasses
+coconut sugar,baking,cup,palm sugar|coconut palm sugar
+sprinkles,baking,tbsp,rainbow sprinkles|nonpareils|jimmies
+water,beverage,cup,drinking water|filtered water|sparkling water
+coffee,beverage,cup,brewed coffee|drip coffee|ground coffee
+tea,beverage,cup,black tea|green tea|herbal tea|iced tea
+orange juice,beverage,cup,oj|fresh squeezed orange juice
+apple juice,beverage,cup,fresh apple juice|apple cider
+lemon juice,beverage,tbsp,fresh lemon juice|bottled lemon juice
+lime juice,beverage,tbsp,fresh lime juice|bottled lime juice
+almond milk,beverage,cup,unsweetened almond milk|almond beverage
+oat milk,beverage,cup,oat beverage|oatly
+soy milk,beverage,cup,soy beverage|soymilk
+coconut water,beverage,cup,natural coconut water
+bone broth,beverage,cup,beef bone broth|chicken bone broth
+kombucha,beverage,cup,raw kombucha|fermented tea
+red wine,beverage,cup,dry red wine|cabernet|merlot
+white wine,beverage,cup,dry white wine|chardonnay|sauvignon blanc
+apple chips,fruit,oz,dried apple chips|apple crisps
+applewood bacon,protein,slice,applewood smoked bacon
+asiago peppercorn dressing,fat,tbsp,asiago dressing|peppercorn dressing
+avocado spread,fat,tbsp,mashed avocado|avocado mash
+baby bella mushroom,vegetable,oz,baby bella mushrooms|crimini mushrooms|baby bellas|baby portobello
+balsamic seasoning,spice,tsp,balsamic spice blend
+beef meatballs,protein,oz,italian meatballs|beef meatball
+beefsteak,protein,oz,
+blackening seasoning,spice,tsp,blackening spice|blackening rub
+blueberry muffin,baking,whole,blueberry muffins
+breaded chicken nuggets,protein,oz,chicken nuggets|breaded nuggets
+brioche burger bun,grain,whole,brioche burger buns|brioche buns
+brioche hot dog bun,grain,whole,brioche hot dog buns|brioche hot dog rolls
+broccoli & cheddar quiche,protein,slice,broccoli cheddar quiche
+buffalo sauce,condiment,tbsp,buffalo wing sauce|hot wing sauce
+cauliflower linguine,vegetable,oz,cauliflower noodles|cauliflower pasta
+chile limon chicken,protein,oz,chili lime chicken|chile lime chicken
+chiocciole pasta,grain,oz,chiocciole|snail pasta
+ciabatta roll,grain,whole,ciabatta rolls|ciabatta|ciabatta bread
+cilantro lime chicken,protein,oz,
+cilantro lime white rice,grain,cup,cilantro lime rice|cilantro rice
+classic alfredo sauce,condiment,cup,alfredo sauce|alfredo
+classic caesar salad kit,vegetable,cup,caesar salad kit
+coconut curry sauce,condiment,cup,coconut curry|thai coconut curry
+cookie dough,baking,oz,chocolate chip cookie dough|raw cookie dough
+corn + wheat tortilla,grain,whole,corn + wheat tortillas|corn and wheat tortillas
+crab cake,protein,whole,crab cakes
+cream cheese spread,dairy,tbsp,whipped cream cheese
+creamy cheddar sauce,condiment,cup,cheddar sauce|cheese sauce
+creamy vodka sauce,condiment,cup,vodka sauce
+creme de brie cheese,dairy,oz,brie spread|brie cheese spread
+creme fraiche,dairy,tbsp,cultured cream|crème fraîche
+dairy-free cream cheese,dairy,tbsp,vegan cream cheese|plant-based cream cheese
+dairy-free sour cream,dairy,tbsp,vegan sour cream|plant-based sour cream
+envy apple,fruit,whole,envy apples
+everything bagel,grain,whole,everything bagels
+fingerling potato,vegetable,oz,fingerling potatoes
+four cheese mini ravioli,grain,cup,four cheese ravioli|mini ravioli
+four cheese tortelloni,grain,cup,cheese tortelloni|tortelloni|four cheese tortellini
+french onion green bean,vegetable,cup,french onion green beans
+french onion hummus,legume,tbsp,french onion dip hummus
+garlic and herb seasoning,spice,tsp,garlic herb seasoning|garlic & herb seasoning
+genoa salami,protein,slice,salami|sliced salami
+green kale,vegetable,cup,
+green leaf lettuce,vegetable,head,leaf lettuce|green leaf
+ground beef patty,protein,oz,ground beef patties|beef patties|hamburger patties
+ground bison,protein,oz,bison meat|bison|ground buffalo
+hamburger bun,grain,whole,hamburger buns|burger buns
+havarti cheese slice,dairy,slice,havarti cheese slices|havarti cheese|sliced havarti|havarti
+honey ham,protein,slice,honey baked ham|sliced honey ham
+honey mustard,condiment,tbsp,honey mustard sauce|honey mustard dressing
+honey roasted turkey breast,protein,oz,honey turkey breast
+honey wheat bread,grain,slice,honey wheat
+honeycrisp apple,fruit,whole,honeycrisp apples
+hot italian turkey sausage,protein,link,hot italian sausage
+kale spinach pesto,condiment,tbsp,kale pesto|spinach pesto
+marinara,condiment,cup,
+mild fresh salsa,condiment,tbsp,mild salsa
+mozzarella ball,dairy,oz,mozzarella balls|ciliegine
+mozzarella string cheese,dairy,whole,string cheese
+naan,grain,whole,naan bread|indian flatbread
+ny strip steak,protein,oz,new york strip|ny strip|new york strip steak
+orzo,grain,cup,orzo pasta
+oven roasted chicken breast,protein,oz,oven roasted chicken|deli chicken breast
+oven roasted turkey breast,protein,oz,oven roasted turkey|deli turkey breast
+pesto aioli,condiment,tbsp,pesto mayo
+pickled red onion,condiment,tbsp,pickled red onions|pickled onions
+pico de gallo salsa,condiment,tbsp,
+pink lady apple,fruit,whole,pink lady apples
+pita,grain,whole,pita bread|pita pocket
+plain bagel,grain,whole,plain bagels
+pork carnitas,protein,oz,carnitas|pulled pork carnitas
+pork loin roast,protein,oz,pork roast
+prosciutto,protein,slice,prosciutto di parma|italian ham|sliced prosciutto
+rainbow baby carrot,vegetable,oz,rainbow baby carrots|rainbow carrots|multicolor baby carrots
+ranch seasoning,spice,tsp,ranch mix|ranch dressing mix
+red enchilada sauce,condiment,cup,enchilada sauce
+red potato,vegetable,whole,red potatoes|red bliss potatoes
+refried red beans,legume,cup,refried beans
+ribeye steak,protein,oz,rib eye steak|rib-eye steak
+riced cauliflower,vegetable,cup,cauliflower rice
+rigati pasta,grain,oz,rigati
+roasted turkey breast,protein,oz,roast turkey breast
+saag sauce,condiment,cup,spinach curry sauce|palak sauce
+seedless green grape,fruit,cup,seedless green grapes
+seedless red grape,fruit,cup,seedless red grapes
+sesame ginger,condiment,tbsp,sesame ginger sauce|sesame ginger dressing
+sirloin tip,protein,oz,sirloin tips|beef sirloin tips
+smoked ahi tuna,protein,oz,smoked tuna
+smoked salmon,protein,oz,lox|cured salmon
+sockeye salmon,protein,oz,sockeye|wild sockeye salmon
+steelhead trout,protein,oz,steelhead|rainbow trout
+stew meat,protein,oz,beef stew meat|stewing beef
+superblend salad,vegetable,cup,salad blend|superblend
+sweet italian chicken sausage,protein,link,italian chicken sausage
+sweet italian pork sausage,protein,link,italian pork sausage|sweet italian sausage
+sweet teriyaki,condiment,tbsp,sweet teriyaki sauce
+thai peanut sauce,condiment,tbsp,peanut sauce|thai peanut
+turkey bacon,protein,slice,
+turkey tenderloin,protein,oz,turkey loin
+uncured pepperoni,protein,slice,pepperoni
+wagyu beef patty,protein,oz,wagyu beef patties|wagyu patties|wagyu hamburger patties
+wagyu filet mignon,protein,oz,wagyu tenderloin
+wagyu ribeye,protein,oz,wagyu ribeye steak
+wagyu strip steak,protein,oz,wagyu new york strip|wagyu ny strip
+yellow american cheese slice,dairy,slice,yellow american cheese slices|american cheese|sliced american cheese|yellow american
+yellow potato,vegetable,whole,yellow potatoes|yukon gold potatoes|yukon potatoes
+za'atar seasoning,spice,tsp,zaatar|za'atar|za'atar spice
+zingy pepper & garlic seasoning,spice,tsp,pepper garlic seasoning|zingy pepper garlic seasoning
+gruyere cheese,dairy,oz,gruyère|aged gruyere
+southwest spice blend,spice,tsp,southwest seasoning|tex-mex spice|southwest spice
+black olives,vegetable,oz,kalamata olives|sliced black olives|pitted black olives
+green olives,vegetable,oz,castelvetrano olives|pitted green olives|sliced green olives
+adobo sauce,condiment,tbsp,chipotle adobo sauce|adobo|chipotles in adobo
+tuscan heat spice,spice,tsp,tuscan heat spice blend|tuscan seasoning
+udon noodles,grain,oz,udon|fresh udon|wheat udon
+yakisoba noodles,grain,oz,yakisoba|stir-fry noodles
+pork chorizo,protein,oz,chorizo sausage|fresh chorizo|mexican chorizo
+chorizo spice blend,spice,tsp,chorizo seasoning|chorizo spice
+mediterranean spice blend,spice,tsp,mediterranean seasoning|mediterranean spice
+mexican blend cheese,dairy,oz,mexican cheese blend|shredded mexican cheese|four cheese mexican blend
+cajun spice blend,spice,tsp,cajun seasoning|cajun spice|creole seasoning
+fajita spice blend,spice,tsp,fajita seasoning|fajita spice
+beef demi-glace,condiment,tbsp,demi glace|beef demi glace|beef stock reduction
+sherry vinegar,condiment,tbsp,spanish sherry vinegar|aged sherry vinegar
+italian cheese blend,dairy,oz,italian cheese|shredded italian cheese|italian shredded cheese blend
+herbs de provence,spice,tsp,herbes de provence|provence herbs
+chipotle powder,spice,tsp,ground chipotle|chipotle chili powder
+jasmine rice,grain,cup,thai jasmine rice|fragrant jasmine rice
+bulgogi sauce,condiment,tbsp,korean bbq sauce|bulgogi marinade
+gouda cheese,dairy,oz,smoked gouda|aged gouda|gouda
+pizza dough,grain,oz,fresh pizza dough|raw pizza dough|pizza crust
+cotija cheese,dairy,oz,mexican cotija|crumbled cotija|cotija
+wheat hot dog bun,grain,whole,wheat hot dog buns|whole wheat hot dog bun|whole wheat hot dog buns
+tzatziki sauce,condiment,tbsp,tzatziki|greek yogurt sauce|cucumber yogurt sauce
+tandoori spice blend,spice,tsp,tandoori seasoning|tandoori masala|tandoori spice
+crescent rolls,grain,whole,crescent roll|refrigerated crescent rolls|pillsbury crescent rolls
+gnocchi,grain,oz,potato gnocchi|fresh gnocchi
+dried cranberries,fruit,oz,craisins|sweetened dried cranberries
+dried apricots,fruit,oz,dried apricot|dried turkish apricots
+apricot jam,condiment,tbsp,apricot preserves|apricot spread
+cranberry jam,condiment,tbsp,cranberry preserves|cranberry spread
+demi-baguette,grain,whole,demi baguette|half baguette|mini baguette
+croissants,grain,whole,croissant|butter croissants|plain croissants
+fettuccine pasta,grain,oz,fettuccine|fettuccini
+linguine pasta,grain,oz,linguine|linguini
+raviolini pasta,grain,oz,raviolini|mini ravioli pasta
+catfish,protein,oz,catfish fillet|farm-raised catfish
+trout,protein,oz,trout fillet|brook trout|freshwater trout
+saffron,spice,tsp,saffron threads|spanish saffron|persian saffron
+croutons,grain,oz,bread croutons|seasoned croutons|garlic croutons
+falafel,protein,oz,falafel balls|falafel patties|chickpea falafel
+raisins,fruit,oz,golden raisins|sultana|sultanas
+sauerkraut,vegetable,cup,fermented cabbage|cured cabbage
