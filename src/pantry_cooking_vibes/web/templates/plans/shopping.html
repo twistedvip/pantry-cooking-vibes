@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% set active_nav = 'plans' %}
+{% block title %}Shopping list — {{ plan.week_of }}{% endblock %}
+{% block content %}
+<p class="breadcrumbs"><a href="/plans/{{ plan.id }}">← Plan {{ plan.week_of }}</a></p>
+<h1>Shopping list for week of {{ plan.week_of }}</h1>
+<p class="hint">
+  v1 is qualitative: it tells you which ingredients to buy vs. what the pantry
+  already covers, but doesn't sum quantities (recipe quantities aren't parsed yet).
+</p>
+
+<section>
+  <h2>Need to buy ({{ shopping.needed|length }})</h2>
+  {% if shopping.needed %}
+  <ul class="shopping-list">
+    {% for n in shopping.needed %}
+    <li>
+      <span class="swatch empty"></span>
+      <strong>{{ n.name }}</strong>
+      {% if n.category %}<span class="category">{{ n.category }}</span>{% endif %}
+      <span class="used-in">for {{ n.in_recipes|join(', ') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty">Nothing to buy — pantry covers everything mapped.</div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Already in pantry ({{ shopping.covered_by_pantry|length }})</h2>
+  {% if shopping.covered_by_pantry %}
+  <ul class="shopping-list covered">
+    {% for c in shopping.covered_by_pantry %}
+    <li>
+      <span class="swatch full"></span>
+      <strong>{{ c.name }}</strong>
+      {% if c.category %}<span class="category">{{ c.category }}</span>{% endif %}
+      <span class="used-in">for {{ c.in_recipes|join(', ') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty">No overlap with pantry.</div>
+  {% endif %}
+</section>
+
+{% if shopping.uncategorized %}
+<section>
+  <h2>Unmapped ingredients ({{ shopping.uncategorized|length }})</h2>
+  <p class="hint">
+    These recipe ingredients weren't matched to a canonical ingredient —
+    you'll need to judge these yourself.
+  </p>
+  <ul class="shopping-list unmapped">
+    {% for u in shopping.uncategorized %}
+    <li>
+      <span class="swatch half"></span>
+      <span>{{ u.original_text }}</span>
+      <span class="used-in">from <a href="/recipes/{{ u.recipe_id }}">{{ u.recipe_name }}</a></span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

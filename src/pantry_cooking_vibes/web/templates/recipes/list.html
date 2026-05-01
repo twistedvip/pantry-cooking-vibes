@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% set active_nav = 'recipes' %}
+{% block title %}Recipes{% endblock %}
+{% block content %}
+<h1>Recipes</h1>
+<p class="screen-sub">Filter the catalog — narrow by name, cook time, or tag.</p>
+
+<div class="browser-layout">
+  <form class="filter-rail" method="get" action="/recipes">
+    <div class="rail-group">
+      <span class="label">search</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="broccoli stir fry…">
+    </div>
+    <div class="rail-group">
+      <span class="label">max cook time (min)</span>
+      <input type="number" name="max_time" value="{{ max_time if max_time is not none else '' }}" min="0" placeholder="e.g. 30">
+    </div>
+    <div class="rail-group">
+      <span class="label">tags (comma-separated)</span>
+      <input type="text" name="tags" value="{{ tags }}" placeholder="quick, gluten-free">
+    </div>
+    <div class="rail-group">
+      <span class="label">ingredients (comma-separated canonical names)</span>
+      <input type="text" name="ingredients" value="{{ ingredients }}" placeholder="broccoli, chicken">
+      <select name="ingredient_mode">
+        <option value="and" {% if ingredient_mode == 'and' %}selected{% endif %}>match all (AND)</option>
+        <option value="or" {% if ingredient_mode == 'or' %}selected{% endif %}>match any (OR)</option>
+      </select>
+      <label class="fav-check">
+        <input type="checkbox" name="pantry_only" value="1" {% if pantry_only %}checked{% endif %}>
+        <span>only recipes I have all ingredients for</span>
+      </label>
+    </div>
+    {% if available_sources %}
+    <div class="rail-group">
+      <span class="label">sources (none = all)</span>
+      <div class="checkbox-list">
+        {% for s in available_sources %}
+        <label class="fav-check">
+          <input type="checkbox" name="sources" value="{{ s }}" {% if s in selected_sources %}checked{% endif %}>
+          <span>{{ s }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="rail-group">
+      <span class="label">result limit</span>
+      <select name="limit">
+        {% for c in limit_choices %}
+        <option value="{{ c }}" {% if c == limit %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="rail-group">
+      <label class="fav-check">
+        <input type="checkbox" name="fav" value="1" {% if favorites_only %}checked{% endif %}>
+        <span>★ favorites only</span>
+      </label>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="primary">Filter</button>
+      <a class="btn btn-reset" href="/recipes">Reset</a>
+    </div>
+  </form>
+
+  <div>
+    {% if recipes %}
+    <div class="toolbar">
+      <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}.</p>
+      <span class="label">sorted by best match</span>
+    </div>
+    <ul class="recipe-grid">
+      {% for r in recipes %}
+      <li class="recipe-card">
+        <form class="fav-toggle" method="post" action="/recipes/{{ r.id }}/favorite">
+          <input type="hidden" name="favorite" value="{{ '0' if r.is_favorite else '1' }}">
+          <input type="hidden" name="redirect_to" value="{{ request.url.path }}?{{ request.url.query }}">
+          <button type="submit" class="fav-btn {% if r.is_favorite %}on{% endif %}"
+                  aria-label="{{ 'Unfavorite' if r.is_favorite else 'Favorite' }} {{ r.name }}"
+                  title="{{ 'Remove from favorites' if r.is_favorite else 'Add to favorites' }}">
+            {{ '★' if r.is_favorite else '☆' }}
+          </button>
+        </form>
+        <a href="/recipes/{{ r.id }}">
+          {% if r.image_url %}
+          <img class="recipe-thumb" src="{{ r.image_url }}" alt="" loading="lazy">
+          {% else %}
+          <div class="recipe-thumb placeholder">🍽</div>
+          {% endif %}
+          <div class="recipe-body">
+            <h3>{{ r.name }}</h3>
+            <div class="meta">
+              {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
+              {% if r.servings %}<span>🍽 {{ r.servings }} servings</span>{% endif %}
+              {% if r.rating is not none %}<span>★ {{ "%.1f"|format(r.rating) }}{% if r.rating_count %} ({{ r.rating_count }}){% endif %}</span>{% endif %}
+              <span class="src-{{ r.source }}">{{ r.source }}</span>
+            </div>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty">No recipes match your filters. <a href="/recipes">Clear filters</a>.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

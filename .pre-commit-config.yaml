@@ -1,4 +1,4 @@
-# Pre-commit hooks for meal-planner.
+# Pre-commit hooks for pantry-cooking-vibes.
 # Install: `uv tool install pre-commit && pre-commit install`
 # Run all: `pre-commit run --all-files`
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "meal-planner"
+name = "pantry-cooking-vibes"
 version = "0.1.0"
 description = "Local meal-planning system with Claude as planning intelligence"
 requires-python = ">=3.11"
@@ -22,10 +22,10 @@ dependencies = [
 ]
 
 [project.scripts]
-meal-cli = "meal_planner.cli:app"
+meal-cli = "pantry_cooking_vibes.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/meal_planner"]
+packages = ["src/pantry_cooking_vibes"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/", "db/", "data/seed/"]
@@ -97,7 +97,7 @@ ignore = [
 [tool.ruff.lint.isort]
 combine-as-imports = true
 force-single-line = false
-known-first-party = ["meal_planner"]
+known-first-party = ["pantry_cooking_vibes"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -105,10 +105,8 @@ indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
 
-[tool.ty.src]
-root = "./src"
-
 [tool.ty.environment]
+root = ["./src"]
 python-version = "3.11"
 
 [tool.ty.rules]

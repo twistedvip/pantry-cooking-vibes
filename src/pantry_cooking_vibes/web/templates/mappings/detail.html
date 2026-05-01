@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_nav = 'mappings' %}
+{% block title %}Mapping #{{ item.id }}{% endblock %}
+{% block content %}
+<p><a href="/mappings">← back to queue</a></p>
+
+<h1>Mapping #{{ item.id }}</h1>
+<p class="screen-sub">Source: <span class="label">{{ item.source }}</span> · Status: <span class="label">{{ item.status }}</span></p>
+
+{% if error %}<div class="flash error">⚠ {{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>Original text</h2>
+  <p><code>{{ item.original_text }}</code></p>
+  {% if item.source_key != item.original_text %}
+  <p class="hint">source_key: <code>{{ item.source_key }}</code></p>
+  {% endif %}
+
+  <h2>Proposed canonical</h2>
+  {% if item.is_no_match %}
+  <p class="empty">No match — pick a canonical below.</p>
+  {% else %}
+  <p>
+    <strong>{{ item.canonical_name }}</strong>
+    {% if item.canonical_category %}<span class="category">{{ item.canonical_category }}</span>{% endif %}
+    {% if item.confidence %}<span class="hint">· {{ '%.0f'|format(item.confidence * 100) }}% confidence</span>{% endif %}
+  </p>
+  {% if item.status == 'proposed' %}
+  <form method="post" action="/mappings/{{ item.id }}/approve" style="display:inline">
+    <button type="submit" class="primary">Approve as proposed</button>
+  </form>
+  <form method="post" action="/mappings/{{ item.id }}/reject" style="display:inline"
+        onsubmit="return confirm('Reject this mapping?')">
+    <button type="submit" class="btn-danger">Reject</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Override canonical</h2>
+  <form class="filters" method="get" action="/mappings/{{ item.id }}">
+    <label>
+      <span class="label">find ingredient</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="e.g. tomato" autofocus>
+    </label>
+    <button type="submit" class="primary">Search</button>
+    {% if search %}<a class="btn btn-reset" href="/mappings/{{ item.id }}">Clear</a>{% endif %}
+  </form>
+
+  {% if search and not suggestions %}
+  <div class="empty" style="margin-top:12px">No canonical matches "{{ search }}".</div>
+  {% endif %}
+
+  {% if suggestions %}
+  <p class="hint mt-8">Pick one to approve with that canonical:</p>
+  <ul class="suggestions">
+    {% for s in suggestions %}
+    <li>
+      <form method="post" action="/mappings/{{ item.id }}/approve" class="add-form">
+        <input type="hidden" name="canonical_id" value="{{ s.id }}">
+        <span class="canonical-name">{{ s.name }}</span>
+        {% if s.category %}<span class="category">{{ s.category }}</span>{% endif %}
+        <button type="submit" class="primary">Approve as {{ s.name }}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

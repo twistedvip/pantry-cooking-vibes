@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Pantry Cooking Vibes — Home{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+<p class="screen-sub">Your kitchen at a glance — browse recipes, check the pantry, review the week's plans.</p>
+
+<div class="stat-grid">
+  <a class="stat-card" href="/recipes">
+    <span class="stat-num">{{ recipe_count }}</span>
+    <span class="stat-label">Recipes</span>
+  </a>
+  <a class="stat-card" href="/pantry">
+    <span class="stat-num">{{ pantry_count }}</span>
+    <span class="stat-label">Pantry items</span>
+  </a>
+  <a class="stat-card" href="/plans">
+    <span class="stat-num">{{ plan_count }}</span>
+    <span class="stat-label">Meal Plans</span>
+  </a>
+  <div class="stat-card">
+    <span class="stat-num">{{ canonical_count }}</span>
+    <span class="stat-label">Canonical ingredients</span>
+  </div>
+</div>
+
+<section class="card quick-start mt-24">
+  <h2>Quick start</h2>
+  <ul>
+    <li><a href="/recipes">Browse recipes</a> — search by name, cooking time, or tag.</li>
+    <li><a href="/pantry">Manage your pantry</a> — track what you have on hand.</li>
+    <li><a href="/plans">Review meal plans</a> — see what's planned and what to shop for.</li>
+  </ul>
+  <p class="hint">
+    To add recipes or create plans, use <code>meal-cli</code> or talk to Claude via the
+    MCP server (<code>meal-cli serve-mcp</code>).
+  </p>
+</section>
+{% endblock %}

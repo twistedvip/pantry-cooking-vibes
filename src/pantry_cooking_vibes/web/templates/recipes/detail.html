@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set active_nav = 'recipes' %}
+{% block title %}{{ recipe.name }}{% endblock %}
+{% block content %}
+<p class="breadcrumbs"><a href="/recipes">← Recipes</a></p>
+
+<article class="recipe-detail">
+  <div class="hero-wrap">
+    {% if recipe.image_url %}
+    <img class="recipe-hero" src="{{ recipe.image_url }}" alt="">
+    {% else %}
+    <div class="hero-placeholder"></div>
+    {% endif %}
+    <div class="hero-overlay">
+      <h1 class="hero-title">{{ recipe.name }}</h1>
+      <div class="hero-chips">
+        <form class="fav-toggle detail" method="post" action="/recipes/{{ recipe.id }}/favorite">
+          <input type="hidden" name="favorite" value="{{ '0' if recipe.is_favorite else '1' }}">
+          <input type="hidden" name="redirect_to" value="/recipes/{{ recipe.id }}">
+          <button type="submit" class="fav-btn big {% if recipe.is_favorite %}on{% endif %}"
+                  title="{{ 'Remove from favorites' if recipe.is_favorite else 'Add to favorites' }}">
+            {{ '★ favorited' if recipe.is_favorite else '☆ favorite' }}
+          </button>
+        </form>
+        {% if recipe.cooking_time_min is not none %}<span class="chip on">⏱ {{ recipe.cooking_time_min }} min</span>{% endif %}
+        {% if recipe.servings %}<span class="chip on">🍽 serves {{ recipe.servings }}</span>{% endif %}
+        {% if recipe.rating is not none %}<span class="chip on">★ {{ "%.1f"|format(recipe.rating) }}{% if recipe.rating_count %} ({{ recipe.rating_count }}){% endif %}</span>{% endif %}
+        <span class="chip src-{{ recipe.source }}">{{ recipe.source }}</span>
+      </div>
+    </div>
+  </div>
+
+  {% if recipe.tags %}
+  <ul class="tag-list">
+    {% for tag in recipe.tags %}<li>{{ tag }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <section class="ingredient-panel">
+    <div class="row between wrap">
+      <h2>Ingredients</h2>
+      <span class="label">highlighted = in your pantry</span>
+    </div>
+    {% if recipe.ingredients %}
+    <div class="ingredient-chips">
+      {% for ing in recipe.ingredients %}
+        {% if ing.canonical_id and ing.canonical_id in pantry_canonical_ids %}
+          <span class="ingredient-chip have" title="in pantry ({{ ing.canonical_name }})">✓ {{ ing.original_text or ing.canonical_name }}</span>
+        {% elif ing.canonical_name %}
+          <span class="ingredient-chip need" title="not in pantry ({{ ing.canonical_name }})">{{ ing.original_text or ing.canonical_name }}</span>
+        {% else %}
+          <span class="ingredient-chip unmapped" title="unmapped">{{ ing.original_text or '(unknown)' }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="ingredient-legend">
+      <span><span class="swatch full"></span> have</span>
+      <span><span class="swatch half"></span> need</span>
+      <span><span class="swatch empty"></span> unmapped</span>
+    </div>
+    {% else %}
+    <div class="empty">No ingredients recorded.</div>
+    {% endif %}
+  </section>
+
+  {% if recipe.instructions_md %}
+  <section>
+    <h2>Method</h2>
+    <div class="steps">
+      {% set steps = recipe.instructions_md.split('\n') | map('trim') | reject('equalto', '') | list %}
+      {% if steps | length > 1 %}
+        {% for step in steps %}
+        <div class="step">
+          <div class="step-num">{{ "%02d"|format(loop.index) }}</div>
+          <div class="step-body">{{ step }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <pre class="instructions">{{ recipe.instructions_md }}</pre>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if recipe.source == 'url' and recipe.source_id %}
+  <p class="source-link">Original: <a href="{{ recipe.source_id }}" rel="noopener" target="_blank">{{ recipe.source_id }}</a></p>
+  {% endif %}
+
+  <form class="recipe-delete" method="post" action="/recipes/{{ recipe.id }}/delete"
+        onsubmit="return confirm('Delete &quot;{{ recipe.name }}&quot;? This cannot be undone.');">
+    <button type="submit" class="btn btn-danger">Delete recipe</button>
+  </form>
+</article>
+{% endblock %}

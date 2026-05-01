@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set active_nav = 'plans' %}
+{% block title %}Meal Plans{% endblock %}
+{% block content %}
+<h1>Meal Plans</h1>
+<p class="screen-sub">Weeks you've planned. Create or edit plans via the CLI or by chatting with Claude through the MCP server.</p>
+
+{% if plans %}
+<ul class="plan-list">
+  {% for p in plans %}
+  <li class="plan-card">
+    <header>
+      <a href="/plans/{{ p.id }}" class="week">Week of {{ p.week_of }}</a>
+      <span class="status-{{ p.status }}">{{ p.status }}</span>
+    </header>
+    <div class="row gap-8 wrap">
+      <span class="chip">{{ p.item_count }} meal{{ '' if p.item_count == 1 else 's' }}</span>
+      {% if p.created_at %}<span class="label">created {{ p.created_at }}</span>{% endif %}
+    </div>
+    {% if p.notes %}<div class="notes">{{ p.notes }}</div>{% endif %}
+    <div class="actions">
+      <a class="btn" href="/plans/{{ p.id }}">Open →</a>
+      <a class="btn btn-link" href="/plans/{{ p.id }}/shopping">Shopping list</a>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">
+  No meal plans yet. Create one via the MCP server (ask Claude to plan your week)
+  or use the CLI.
+</div>
+{% endif %}
+{% endblock %}

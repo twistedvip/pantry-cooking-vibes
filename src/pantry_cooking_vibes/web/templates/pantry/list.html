@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% set active_nav = 'pantry' %}
+{% block title %}Pantry{% endblock %}
+{% block content %}
+<h1>Pantry</h1>
+<p class="screen-sub">What's in the kitchen — grouped by category. Recipe pages highlight which of these you already have.</p>
+
+{% if error %}<div class="flash error">⚠ {{ error }}</div>{% endif %}
+{% if added %}<div class="flash ok">✓ Added {{ added }}</div>{% endif %}
+{% if removed %}<div class="flash ok">✓ Removed {{ removed }}</div>{% endif %}
+{% if updated %}<div class="flash ok">✓ Updated {{ updated }}</div>{% endif %}
+
+<section class="card">
+  <h2>Add an item</h2>
+  <form class="filters" method="get" action="/pantry">
+    <label>
+      <span class="label">find ingredient</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="e.g. tomato">
+    </label>
+    <button type="submit" class="primary">Search</button>
+    {% if search %}<a class="btn btn-reset" href="/pantry">Clear</a>{% endif %}
+  </form>
+
+  {% if search and not suggestions %}
+  <div class="empty" style="margin-top:12px">No canonical ingredient matches "{{ search }}". Try a simpler term.</div>
+  {% endif %}
+
+  {% if suggestions %}
+  <p class="hint mt-8">Pick an ingredient to add:</p>
+  <ul class="suggestions">
+    {% for s in suggestions %}
+    <li>
+      <form method="post" action="/pantry/add" class="add-form">
+        <input type="hidden" name="canonical_id" value="{{ s.id }}">
+        <span class="canonical-name">{{ s.name }}</span>
+        {% if s.category %}<span class="category">{{ s.category }}</span>{% endif %}
+        <label>qty <input type="number" name="quantity" step="0.01" min="0" value="1" required></label>
+        <label>unit <input type="text" name="unit" value="{{ s.default_unit or '' }}" placeholder="lb, cup, count"></label>
+        <label>expires <input type="date" name="expires_at"></label>
+        <label>note <input type="text" name="note" placeholder="optional"></label>
+        <button type="submit" class="primary">Add</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section>
+  <h2>In your pantry ({{ items|length }})</h2>
+  {% if items %}
+    {% set groups = {} %}
+    {% for p in items %}
+      {% set _ = groups.setdefault(p.category or 'other', []).append(p) %}
+    {% endfor %}
+    <div class="pantry-cats">
+      {% for cat, rows in groups.items() %}
+      <div class="pantry-cat">
+        <header>
+          <h3>{{ cat }}</h3>
+          <span class="label">{{ rows|length }} item{{ '' if rows|length == 1 else 's' }}</span>
+        </header>
+        {% for p in rows %}
+        <div class="pantry-item">
+          <span class="swatch full" title="in stock"></span>
+          <span class="name">{{ p.canonical_name }}</span>
+          <form class="edit-form" method="post" action="/pantry/{{ p.id }}/update">
+            <input type="number" name="quantity" step="0.01" min="0" value="{{ p.quantity }}" required aria-label="quantity">
+            <input type="text" name="unit" value="{{ p.unit or '' }}" placeholder="unit" aria-label="unit">
+            <button type="submit" class="btn-save">Save</button>
+          </form>
+          {% if p.expires_at %}<span class="qty">exp {{ p.expires_at }}</span>{% endif %}
+          <form method="post" action="/pantry/{{ p.id }}/delete">
+            <button type="submit" class="btn-danger" onclick="return confirm('Remove {{ p.canonical_name }}?')">Remove</button>
+          </form>
+          {% if p.note %}<span class="note">{{ p.note }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">Your pantry is empty. Search above to add something.</div>
+  {% endif %}
+</section>
+{% endblock %}

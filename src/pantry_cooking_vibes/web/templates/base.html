@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Pantry Cooking Vibes{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="stamp">pantry</span>cooking vibes</a>
+    <nav class="mainnav">
+      <a href="/recipes"{% if active_nav == 'recipes' %} class="active"{% endif %}>Recipes</a>
+      <a href="/pantry"{% if active_nav == 'pantry' %} class="active"{% endif %}>Pantry</a>
+      <a href="/plans"{% if active_nav == 'plans' %} class="active"{% endif %}>Plans</a>
+      <a href="/mappings"{% if active_nav == 'mappings' %} class="active"{% endif %}>Mappings</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot">
+    <span>Read-only browse UI · pantry is editable · plans managed via CLI or MCP</span>
+  </footer>
+</body>
+</html>

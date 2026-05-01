@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% set active_nav = 'mappings' %}
+{% block title %}Mapping Review{% endblock %}
+{% block content %}
+<h1>Ingredient mapping review</h1>
+<p class="screen-sub">Approve or reject fuzzy-matched canonicals queued by the importers and normalizer.</p>
+
+{% if error %}<div class="flash error">⚠ {{ error }}</div>{% endif %}
+{% if approved %}<div class="flash ok">✓ Approved queue id {{ approved }}</div>{% endif %}
+{% if rejected %}<div class="flash ok">✓ Rejected queue id {{ rejected }}</div>{% endif %}
+
+<section class="card">
+  <form class="filters" method="get" action="/mappings">
+    <label>
+      <span class="label">status</span>
+      <select name="status">
+        {% for s in ['proposed', 'approved', 'rejected', 'all'] %}
+        <option value="{{ s }}"{% if status == s %} selected{% endif %}>
+          {{ s }}{% if s in counts %} ({{ counts[s] }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span class="label">source</span>
+      <select name="source">
+        <option value="">all</option>
+        {% for s in sources %}
+        <option value="{{ s }}"{% if source == s %} selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span class="label">page size</span>
+      <input type="number" name="limit" value="{{ limit }}" min="1" max="250" style="width:80px">
+    </label>
+    <button type="submit" class="primary">Filter</button>
+    <a class="btn btn-reset" href="/mappings">Reset</a>
+  </form>
+</section>
+
+<section>
+  <h2>{{ total }} row{{ '' if total == 1 else 's' }} ({{ status }}{% if source %}, {{ source }}{% endif %})</h2>
+
+  {% if items %}
+  <table class="mapping-table">
+    <thead>
+      <tr>
+        <th>Original text</th>
+        <th>Source</th>
+        <th>Confidence</th>
+        <th>Proposed canonical</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td><a href="/mappings/{{ it.id }}"><code>{{ it.original_text }}</code></a></td>
+        <td><span class="label">{{ it.source }}</span></td>
+        <td>
+          {% if it.confidence %}
+            {{ '%.0f'|format(it.confidence * 100) }}%
+          {% else %}
+            <span class="hint">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if it.is_no_match %}
+            <em class="hint">no match — pick one</em>
+          {% else %}
+            {{ it.canonical_name }}
+            {% if it.canonical_category %}<span class="category">{{ it.canonical_category }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="actions-cell">
+          {% if not it.is_no_match and it.status == 'proposed' %}
+          <form method="post" action="/mappings/{{ it.id }}/approve" style="display:inline">
+            <button type="submit" class="primary">Approve</button>
+          </form>
+          {% endif %}
+          {% if it.status == 'proposed' %}
+          <form method="post" action="/mappings/{{ it.id }}/reject" style="display:inline"
+                onsubmit="return confirm('Reject mapping for {{ it.original_text|e }}?')">
+            <button type="submit" class="btn-danger">Reject</button>
+          </form>
+          {% endif %}
+          <a class="btn" href="/mappings/{{ it.id }}">Change…</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if total > limit %}
+  <nav class="pager">
+    {% if offset > 0 %}
+    <a class="btn" href="/mappings?status={{ status }}&source={{ source }}&limit={{ limit }}&offset={{ [offset - limit, 0]|max }}">← Prev</a>
+    {% endif %}
+    <span class="hint">Showing {{ offset + 1 }}–{{ [offset + items|length, total]|min }} of {{ total }}</span>
+    {% if offset + items|length < total %}
+    <a class="btn" href="/mappings?status={{ status }}&source={{ source }}&limit={{ limit }}&offset={{ offset + limit }}">Next →</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+  <div class="empty">Nothing to review. The queue is clear.</div>
+  {% endif %}
+</section>
+{% endblock %}

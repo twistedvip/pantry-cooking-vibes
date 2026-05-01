@@ -1,0 +1,260 @@
+"""Tests for db init, schema, migrations, FTS triggers, seed loader."""
+
+from __future__ import annotations
+
+import pytest
+
+from pantry_cooking_vibes.db import (
+    apply_schema,
+    connect,
+    get_connection,
+    init_db,
+    run_migrations,
+    seed_canonical_ingredients,
+)
+
+
+def test_init_db_idempotent(tmp_path):
+    db = tmp_path / "app.db"
+    n1 = init_db(db_path=db)
+    n2 = init_db(db_path=db)
+    assert n1 > 0
+    assert n2 == 0  # second run inserts nothing new
+
+    with connect(db) as conn:
+        total = conn.execute("SELECT COUNT(*) FROM canonical_ingredients").fetchone()[0]
+    assert total == n1
+
+
+def test_init_db_creates_parent_directory(tmp_path):
+    nested = tmp_path / "deep" / "nested" / "app.db"
+    init_db(db_path=nested)
+    assert nested.exists()
+
+
+def test_get_connection_pragmas(db_path):
+    with get_connection(db_path) as conn:
+        fk = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        wal = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        bt = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert fk == 1
+    assert wal.lower() == "wal"
+    assert bt == 5000
+
+
+def test_schema_check_constraints_enforced(db_path):
+    """CHECK constraints should reject invalid values.
+
+    `source` is intentionally free-form (validated at the application layer
+    so plugin-provided importers can register new source names), so it is
+    not covered here.
+    """
+    import sqlite3
+
+    with connect(db_path) as conn:
+        # bad rating
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO recipes (source, name, rating) VALUES ('manual', 'X', 99.0)")
+
+    with connect(db_path) as conn:
+        # bad nutrition_json
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO recipes (source, name, nutrition_json) "
+                "VALUES ('manual', 'X', 'not-json')"
+            )
+
+
+def test_pantry_blocks_canonical_delete(db_path):
+    """ON DELETE RESTRICT should prevent canonical deletion if pantry references it."""
+    import sqlite3
+
+    with connect(db_path) as conn:
+        canonical_id = conn.execute(
+            "SELECT id FROM canonical_ingredients ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+        conn.execute(
+            "INSERT INTO pantry (canonical_id, quantity, unit) VALUES (?, 1.0, 'oz')",
+            (canonical_id,),
+        )
+
+    with connect(db_path) as conn:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("DELETE FROM canonical_ingredients WHERE id=?", (canonical_id,))
+
+
+def test_fts_trigger_inserts_and_deletes(db_path):
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO recipes (source, source_id, name, instructions_md) "
+            "VALUES ('manual', 'fts-1', 'Lemon Pepper Chicken', 'sear in pan')"
+        )
+
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT rowid FROM recipes_fts WHERE recipes_fts MATCH 'lemon'"
+        ).fetchall()
+    assert len(rows) == 1
+
+    with connect(db_path) as conn:
+        conn.execute("DELETE FROM recipes WHERE source_id='fts-1'")
+
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT rowid FROM recipes_fts WHERE recipes_fts MATCH 'lemon'"
+        ).fetchall()
+    assert len(rows) == 0
+
+
+def test_fts_trigger_updates_only_on_relevant_columns(db_path):
+    """Updating rating shouldn't churn FTS index — only name/instructions_md should."""
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO recipes (source, source_id, name, instructions_md, rating) "
+            "VALUES ('manual', 'fts-2', 'Garlic Soup', 'simmer', 3.0)"
+        )
+
+    # Touching rating must not break the FTS row.
+    with connect(db_path) as conn:
+        conn.execute("UPDATE recipes SET rating=4.5 WHERE source_id='fts-2'")
+
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT rowid FROM recipes_fts WHERE recipes_fts MATCH 'garlic'"
+        ).fetchall()
+    assert len(rows) == 1
+
+    # Touching name must update the FTS row.
+    with connect(db_path) as conn:
+        conn.execute("UPDATE recipes SET name='Onion Soup' WHERE source_id='fts-2'")
+
+    with connect(db_path) as conn:
+        garlic = conn.execute(
+            "SELECT rowid FROM recipes_fts WHERE recipes_fts MATCH 'garlic'"
+        ).fetchall()
+        onion = conn.execute(
+            "SELECT rowid FROM recipes_fts WHERE recipes_fts MATCH 'onion'"
+        ).fetchall()
+    assert len(garlic) == 0
+    assert len(onion) == 1
+
+
+def test_run_migrations_applies_unknown_files_once(tmp_path):
+    db = tmp_path / "app.db"
+    init_db(db_path=db)
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    # Pick a version higher than any real migration so user_version gating allows it.
+    m = migrations / "9001_test.sql"
+    m.write_text("CREATE TABLE IF NOT EXISTS migration_marker (id INTEGER PRIMARY KEY);")
+
+    with connect(db) as conn:
+        applied = run_migrations(conn, migrations_dir=migrations)
+    assert applied == ["9001_test.sql"]
+
+    with connect(db) as conn:
+        applied2 = run_migrations(conn, migrations_dir=migrations)
+    assert applied2 == []
+
+
+def test_run_migrations_sets_user_version(tmp_path):
+    """After applying real migrations, PRAGMA user_version reflects the highest version."""
+    db = tmp_path / "app.db"
+    init_db(db_path=db)
+    with connect(db) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    # Three migrations exist (001, 002, 003); user_version should be 3.
+    assert version == 3
+
+
+def test_run_migrations_skips_when_user_version_advanced(tmp_path):
+    """A migration whose version <= user_version is skipped even if its filename is unrecorded."""
+    db = tmp_path / "app.db"
+    init_db(db_path=db)
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    # Lower version than current user_version (=2) — should be skipped.
+    (migrations / "0001_old.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS should_not_exist (id INTEGER PRIMARY KEY);"
+    )
+
+    with connect(db) as conn:
+        applied = run_migrations(conn, migrations_dir=migrations)
+    assert applied == []
+
+    with connect(db) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "should_not_exist" not in tables
+
+
+def test_run_migrations_legacy_db_syncs_user_version(tmp_path):
+    """A pre-existing DB with rows in schema_migrations but user_version=0
+    should auto-bump user_version to the highest recorded version on first run,
+    and not re-apply already-recorded migrations."""
+
+    from pantry_cooking_vibes.db import apply_schema, get_connection, run_migrations
+
+    db = tmp_path / "legacy.db"
+    conn = get_connection(db)
+    try:
+        apply_schema(conn)
+        # Manually populate schema_migrations as the old code would have, with
+        # user_version still at 0.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "filename TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute("INSERT INTO schema_migrations (filename) VALUES ('001_recipe_favorites.sql')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001_recipe_favorites.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS recipe_favorites_legacy_marker (recipe_id INTEGER);"
+    )
+    (migrations / "002_new.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS new_marker (id INTEGER PRIMARY KEY);"
+    )
+
+    with connect(db) as conn:
+        applied = run_migrations(conn, migrations_dir=migrations)
+    # Recorded one (v1) is skipped; only the new v2 runs.
+    assert applied == ["002_new.sql"]
+
+    with connect(db) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert version == 2
+
+    # Legacy-marker table from v1 should NOT exist (we skipped it).
+    with connect(db) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "recipe_favorites_legacy_marker" not in tables
+    assert "new_marker" in tables
+
+
+def test_migration_filename_without_version_raises(tmp_path):
+    """A migration filename missing the NNN_ prefix is a programmer bug — surface it."""
+    db = tmp_path / "app.db"
+    init_db(db_path=db)
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "no_prefix.sql").write_text("SELECT 1;")
+
+    with connect(db) as conn:
+        with pytest.raises(ValueError, match="must start with NNN_"):
+            run_migrations(conn, migrations_dir=migrations)
+
+
+def test_seed_loader_idempotent(tmp_path):
+    db = tmp_path / "app.db"
+    with connect(db) as conn:
+        apply_schema(conn)
+        first = seed_canonical_ingredients(conn)
+        second = seed_canonical_ingredients(conn)
+    assert first > 0
+    assert second == 0

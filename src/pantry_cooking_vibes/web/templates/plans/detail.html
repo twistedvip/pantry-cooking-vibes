@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set active_nav = 'plans' %}
+{% block title %}Plan {{ plan.week_of }}{% endblock %}
+{% block content %}
+<p class="breadcrumbs"><a href="/plans">← Meal plans</a></p>
+
+<div class="row between wrap gap-12">
+  <div>
+    <h1>Week of {{ plan.week_of }}</h1>
+    <div class="row gap-8 wrap">
+      <span class="status-{{ plan.status }}">{{ plan.status }}</span>
+      {% if plan.created_at %}<span class="label">created {{ plan.created_at }}</span>{% endif %}
+    </div>
+  </div>
+  <a class="btn primary" href="/plans/{{ plan.id }}/shopping">Shopping list →</a>
+</div>
+
+{% if plan.notes %}<blockquote class="note mt-12">{{ plan.notes }}</blockquote>{% endif %}
+
+{% if plan['items'] %}
+<div class="plan-grid mt-16">
+  <div class="plan-row head">
+    <span>day</span><span>meal</span><span>recipe</span><span>servings</span><span>time</span>
+  </div>
+  {% for item in plan['items'] %}
+  <div class="plan-row">
+    <span><span class="chip on">{{ item.day or '—' }}</span></span>
+    <span class="label">{{ item.meal_slot or '—' }}</span>
+    <span><a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a></span>
+    <span>{{ item.servings_planned }}</span>
+    <span>{{ item.cooking_time_min if item.cooking_time_min is not none else '' }}{% if item.cooking_time_min is not none %} min{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty mt-16">This plan has no recipes yet.</div>
+{% endif %}
+{% endblock %}
