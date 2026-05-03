@@ -1,0 +1,63 @@
+# Pattern B deployment: Portainer (or local `docker compose`) builds the image
+# from the public git repo at deploy time. No registry required.
+#
+# Portainer Stack import:
+#   1. Stacks → Add stack → "Repository"
+#   2. Git URL: https://github.com/twistedvip/pantry-cooking-vibes
+#   3. Compose path: docker-compose.yml
+#   4. Optionally pin a tag/branch via PCV_GIT_REF (default: main)
+#   5. Deploy. Portainer pulls + builds on the agent host.
+#
+# Local equivalent:
+#   docker compose up -d --build
+#
+# Override port:           PCV_PORT=9000 docker compose up -d
+# Override pinned commit:  PCV_GIT_REF=v0.2.0 docker compose up -d --build
+
+services:
+  meal-planner:
+    # Build from the public git repo. The `#` fragment selects a ref
+    # (branch / tag / sha). Default `main` follows latest.
+    build:
+      context: "https://github.com/twistedvip/pantry-cooking-vibes.git#${PCV_GIT_REF:-main}"
+      dockerfile: Dockerfile
+    image: pantry-cooking-vibes:${PCV_GIT_REF:-main}
+    container_name: meal-planner
+    restart: unless-stopped
+
+    environment:
+      # Listen port inside the container. Match the host-side mapping below.
+      PORT: "${PCV_PORT:-8000}"
+      # SQLite file path. Lives inside the named volume mounted at /app/data/store.
+      # Both the entrypoint and meal-cli (via Typer envvar=) honor this.
+      PANTRY_COOKING_VIBES_DB: "/app/data/store/app.db"
+
+    ports:
+      # host:container — change the host side to free up 8000 if needed.
+      - "${PCV_PORT:-8000}:${PCV_PORT:-8000}"
+
+    volumes:
+      # Named volume = persistent SQLite + WAL/SHM sidecar files. Survives
+      # `docker compose down`; only `docker volume rm meal_data` wipes it.
+      - meal_data:/app/data/store
+
+    # Healthcheck is also defined in the Dockerfile. Repeat here so compose /
+    # Portainer respect overrides without rebuilding.
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - |
+          import os, sys, urllib.request
+          url = f'http://127.0.0.1:{os.environ.get("PORT","8000")}/'
+          sys.exit(0 if urllib.request.urlopen(url, timeout=3).status == 200 else 1)
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  meal_data:
+    # Default driver = local. Portainer surfaces this in the Volumes view
+    # under name `<stack-name>_meal_data`.

@@ -1,0 +1,57 @@
+# Keep the build context lean. Only files COPY'd in the Dockerfile actually
+# matter, but a small context = faster `docker build` upload + tighter
+# .dockerignore review for accidental secrets.
+
+# VCS / editor / OS
+.git/
+.gitignore
+.gitattributes
+.editorconfig
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Python build / venv / caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Project state we don't want shipped or that bloats context
+data/raw/
+data/app.db
+data/app.db-wal
+data/app.db-shm
+db_backups/
+scrapers/
+tests/
+docs/
+scripts/
+
+# OMC / Claude scratch state
+.claude/
+.omc/
+*.log
+repo_separation_tracker.log
+
+# Pre-commit / CI config not needed at runtime
+.pre-commit-config.yaml
+.github/
+
+# Docker meta — Dockerfile itself is read separately, no need to copy in
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml

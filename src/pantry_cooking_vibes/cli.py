@@ -9,7 +9,11 @@ app = typer.Typer(help="pantry-cooking-vibes CLI", no_args_is_help=True)
 
 @app.command("db-init")
 def db_init(
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """Initialize the database: apply schema, run migrations, seed canonical ingredients."""
     seeded = init_db(db_path=db)
@@ -22,7 +26,11 @@ def db_init(
 
 @app.command("normalize-recipes")
 def normalize_recipes(
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
 ) -> None:
     """Backfill recipe_ingredients.canonical_id by fuzzy-matching original_text.
@@ -43,7 +51,11 @@ def normalize_recipes(
 
 @app.command("apply-text-mappings")
 def apply_text_mappings_cmd(
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
 ) -> None:
     """Apply approved 'recipe_ingredient_text' queue rows to recipe_ingredients."""
@@ -58,7 +70,11 @@ def apply_text_mappings_cmd(
 @app.command("review-mappings")
 def review_mappings(
     limit: int = typer.Option(50, help="Max rows to show"),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """List pending canonical-ingredient proposals for human review."""
     from pantry_cooking_vibes.importers.normalize import review_pending
@@ -86,7 +102,11 @@ def approve_mapping_cmd(
         None,
         help="Override the proposed canonical_id. Default: keep current proposal.",
     ),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """Approve a queued ingredient mapping (optionally overriding the canonical)."""
     from pantry_cooking_vibes.importers.normalize import approve_mapping
@@ -115,7 +135,11 @@ def approve_mapping_cmd(
 @app.command("reject-mapping")
 def reject_mapping_cmd(
     queue_id: int = typer.Argument(..., help="ingredient_mapping_queue.id to reject"),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """Reject a queued ingredient mapping."""
     from pantry_cooking_vibes.importers.normalize import reject_mapping
@@ -136,7 +160,11 @@ def reject_mapping_cmd(
 @app.command("import-url")
 def import_url_cmd(
     url: str = typer.Argument(..., help="Recipe URL"),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
 ) -> None:
     """Import a recipe from a URL via schema.org JSON-LD."""
@@ -170,7 +198,11 @@ def ingest_cmd(
         help="Optional plugin name (entry-point group 'pantry_cooking_vibes.importers') "
         "to post-process records before validation.",
     ),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
 ) -> None:
     """Ingest a JSONL file conforming to docs/jsonl_contract.md."""
@@ -225,7 +257,11 @@ def ingest_cmd(
 
 @app.command("list-sources")
 def list_sources_cmd(
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """List distinct recipe sources currently in the database with recipe counts."""
     with connect(db) as conn:
@@ -257,7 +293,11 @@ def serve_web(
     host: str = typer.Option("127.0.0.1", help="Bind host"),
     port: int = typer.Option(8000, help="Bind port"),
     reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (dev)"),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """Start the FastAPI read-only web UI (pantry is read-write)."""
     import os
@@ -297,7 +337,11 @@ def db_backup(
         help="Destination file, or a directory (in which case a timestamped "
         "filename is generated inside it).",
     ),
-    db: Path = typer.Option(DB_PATH, help="Path to SQLite database file"),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
 ) -> None:
     """Back up the SQLite database using the online backup API."""
     import os

@@ -48,6 +48,10 @@ markers = [
     "e2e: browser-driven end-to-end tests (require `playwright install`)",
 ]
 addopts = "-m 'not e2e'"
+# Scraper sub-repos under scrapers/ have their own conftest.py that collides
+# with this core conftest.py during collection. Each scraper is run from its
+# own directory (`cd scrapers/<name> && pytest`); core stays out of that tree.
+norecursedirs = ["scrapers", ".venv", "data", "db_backups", "node_modules"]
 
 [tool.ruff]
 line-length = 100

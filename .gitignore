@@ -13,6 +13,9 @@ build/
 # AI folders
 .omc/
 
+# Claude Code per-user settings (paths, allowlists)
+.claude/settings.local.json
+
 # Virtual environments
 .venv/
 venv/
