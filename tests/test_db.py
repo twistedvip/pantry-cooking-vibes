@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from pantry_cooking_vibes.db import (
@@ -30,6 +32,56 @@ def test_init_db_creates_parent_directory(tmp_path):
     nested = tmp_path / "deep" / "nested" / "app.db"
     init_db(db_path=nested)
     assert nested.exists()
+
+
+def test_migration_004_purges_image_less_recipes(db_path):
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "db"
+        / "migrations"
+        / "004_drop_recipes_without_image.sql"
+    ).read_text(encoding="utf-8")
+
+    with connect(db_path) as conn:
+        ok = conn.execute(
+            "INSERT INTO recipes (source, source_id, name, image_url) "
+            "VALUES ('manual', 'ok', 'Has Pic', 'https://example.com/p.jpg') RETURNING id"
+        ).fetchone()["id"]
+        null_img = conn.execute(
+            "INSERT INTO recipes (source, source_id, name, image_url) "
+            "VALUES ('manual', 'null', 'No Pic', NULL) RETURNING id"
+        ).fetchone()["id"]
+        blank_img = conn.execute(
+            "INSERT INTO recipes (source, source_id, name, image_url) "
+            "VALUES ('manual', 'blank', 'Blank Pic', '   ') RETURNING id"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO recipe_ingredients (recipe_id, original_text) VALUES (?, 'x')",
+            (null_img,),
+        )
+        conn.execute("INSERT INTO recipe_tags VALUES (?, 'tag')", (blank_img,))
+
+        conn.executescript(migration)
+
+        kept = {r["id"] for r in conn.execute("SELECT id FROM recipes")}
+        assert kept == {ok}
+
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id IN (?, ?)",
+            (null_img, blank_img),
+        ).fetchone()[0]
+        assert orphans == 0
+        orphan_tags = conn.execute(
+            "SELECT COUNT(*) FROM recipe_tags WHERE recipe_id IN (?, ?)",
+            (null_img, blank_img),
+        ).fetchone()[0]
+        assert orphan_tags == 0
+
+        fts_ids = {
+            r[0]
+            for r in conn.execute("SELECT rowid FROM recipes_fts").fetchall()
+        }
+        assert null_img not in fts_ids and blank_img not in fts_ids
 
 
 def test_get_connection_pragmas(db_path):
@@ -164,8 +216,10 @@ def test_run_migrations_sets_user_version(tmp_path):
     init_db(db_path=db)
     with connect(db) as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-    # Three migrations exist (001, 002, 003); user_version should be 3.
-    assert version == 3
+    # user_version tracks the highest migration on disk.
+    migrations_dir = Path(__file__).resolve().parents[1] / "db" / "migrations"
+    expected = max(int(p.name.split("_", 1)[0]) for p in migrations_dir.glob("*.sql"))
+    assert version == expected
 
 
 def test_run_migrations_skips_when_user_version_advanced(tmp_path):

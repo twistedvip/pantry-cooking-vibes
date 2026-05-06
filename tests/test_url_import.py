@@ -9,6 +9,7 @@ import pytest
 
 from pantry_cooking_vibes.db import connect
 from pantry_cooking_vibes.importers.url_import import (
+    RecipeMissingImageError,
     RecipeNotFoundError,
     _collect_tags,
     _image_url,
@@ -361,6 +362,7 @@ def test_import_url_auto_approved_ingredient_resolves_to_canonical(db_path):
     html = (
         '<script type="application/ld+json">'
         '{"@type":"Recipe","name":"Onion Test",'
+        '"image":"https://example.com/onion.jpg",'
         '"recipeIngredient":["onion"]}'
         "</script>"
     )
@@ -408,10 +410,37 @@ def test_import_url_no_recipe_raises(db_path):
         import_url("https://example.com/nope", db_path=db_path, html=html, quiet=True)
 
 
+def test_import_url_missing_image_raises_and_does_not_write(db_path):
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Recipe","name":"NoPic","recipeIngredient":["salt"]}'
+        "</script>"
+    )
+    with pytest.raises(RecipeMissingImageError):
+        import_url("https://example.com/noimg", db_path=db_path, html=html, quiet=True)
+    with connect(db_path) as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM recipes WHERE source='url'"
+        ).fetchone()[0]
+    assert n == 0
+
+
+def test_import_url_blank_image_raises(db_path):
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Recipe","name":"BlankPic","image":"",'
+        '"recipeIngredient":["salt"]}'
+        "</script>"
+    )
+    with pytest.raises(RecipeMissingImageError):
+        import_url("https://example.com/blank", db_path=db_path, html=html, quiet=True)
+
+
 def test_import_url_strips_html_in_instructions(db_path):
     html = (
         '<script type="application/ld+json">'
         '{"@type":"Recipe","name":"HTML Test",'
+        '"image":"https://example.com/html.jpg",'
         '"recipeInstructions":"<p>Mix <b>well</b>.</p><p>Bake.</p>"}'
         "</script>"
     )
