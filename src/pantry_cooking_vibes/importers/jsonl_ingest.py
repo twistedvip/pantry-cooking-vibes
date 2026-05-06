@@ -212,6 +212,9 @@ def ingest_jsonl(
             except ValidationError:
                 stats["skipped"] += 1
                 continue
+            if not rec.image_url or not rec.image_url.strip():
+                stats["skipped"] += 1
+                continue
             recipe_id = _upsert_recipe(conn, source, rec)
             stats["tags"] += _replace_tags(conn, recipe_id, rec.tags)
             stats["ingredients"] += _replace_ingredients(

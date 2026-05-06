@@ -411,6 +411,10 @@ class RecipeNotFoundError(ValueError):
     """Raised when no schema.org Recipe is present in the page."""
 
 
+class RecipeMissingImageError(ValueError):
+    """Raised when a parsed recipe has no usable image URL."""
+
+
 def import_url(
     url: str,
     *,
@@ -426,6 +430,9 @@ def import_url(
         raise RecipeNotFoundError(f"no schema.org Recipe found at {url}")
 
     rec = parse_recipe(entity, url)
+    img = rec.get("image_url")
+    if not img or not img.strip():
+        raise RecipeMissingImageError(f"recipe at {url} has no image; skipping import")
 
     with connect(db) as conn:
         canonical_map = _load_canonical_map(conn)

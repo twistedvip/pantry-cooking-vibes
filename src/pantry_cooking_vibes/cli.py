@@ -168,11 +168,15 @@ def import_url_cmd(
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
 ) -> None:
     """Import a recipe from a URL via schema.org JSON-LD."""
-    from pantry_cooking_vibes.importers.url_import import RecipeNotFoundError, import_url
+    from pantry_cooking_vibes.importers.url_import import (
+        RecipeMissingImageError,
+        RecipeNotFoundError,
+        import_url,
+    )
 
     try:
         stats = import_url(url, db_path=db, quiet=quiet)
-    except RecipeNotFoundError as e:
+    except (RecipeNotFoundError, RecipeMissingImageError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e
     except Exception as e:
