@@ -56,7 +56,12 @@ rows = [
     ("onion", "vegetable", "whole", "yellow onion|white onion|brown onion"),
     ("red onion", "vegetable", "whole", "purple onion"),
     ("garlic", "vegetable", "clove", "garlic cloves|fresh garlic"),
-    ("bell pepper", "vegetable", "whole", "sweet pepper|capsicum|red bell pepper|green bell pepper|yellow bell pepper"),
+    (
+        "bell pepper",
+        "vegetable",
+        "whole",
+        "sweet pepper|capsicum|red bell pepper|green bell pepper|yellow bell pepper",
+    ),
     ("tomato", "vegetable", "whole", "roma tomato|beefsteak tomato|fresh tomato"),
     ("cherry tomato", "vegetable", "cup", "grape tomatoes|cherry tomatoes"),
     ("cucumber", "vegetable", "whole", "english cucumber|seedless cucumber"),
@@ -177,7 +182,12 @@ rows = [
     ("greek yogurt", "dairy", "cup", "plain greek yogurt|strained yogurt"),
     ("cottage cheese", "dairy", "cup", "small curd cottage cheese|large curd"),
     ("ricotta cheese", "dairy", "cup", "whole milk ricotta|part skim ricotta"),
-    ("mozzarella cheese", "dairy", "oz", "fresh mozzarella|low moisture mozzarella|part skim mozzarella"),
+    (
+        "mozzarella cheese",
+        "dairy",
+        "oz",
+        "fresh mozzarella|low moisture mozzarella|part skim mozzarella",
+    ),
     ("cheddar cheese", "dairy", "oz", "sharp cheddar|mild cheddar|aged cheddar"),
     ("parmesan cheese", "dairy", "oz", "parmigiano reggiano|grated parmesan|pecorino romano"),
     ("feta cheese", "dairy", "oz", "crumbled feta|greek feta"),
@@ -201,7 +211,12 @@ rows = [
     ("adzuki beans", "legume", "cup", "azuki beans|red beans"),
     ("soybeans", "legume", "cup", "dried soybeans|whole soybeans"),
     ("hummus", "legume", "tbsp", "store bought hummus|homemade hummus"),
-    ("peanut butter", "legume", "tbsp", "natural peanut butter|creamy peanut butter|crunchy peanut butter"),
+    (
+        "peanut butter",
+        "legume",
+        "tbsp",
+        "natural peanut butter|creamy peanut butter|crunchy peanut butter",
+    ),
     ("peanuts", "legume", "oz", "roasted peanuts|dry roasted peanuts|raw peanuts"),
     # Nuts
     ("almonds", "nut", "oz", "raw almonds|roasted almonds|sliced almonds|slivered almonds"),
@@ -309,12 +324,22 @@ rows = [
     ("pesto", "condiment", "tbsp", "basil pesto|store bought pesto"),
     ("bbq sauce", "condiment", "tbsp", "barbecue sauce|sweet baby rays"),
     ("teriyaki sauce", "condiment", "tbsp", "teriyaki marinade"),
-    ("coconut milk", "condiment", "cup", "canned coconut milk|light coconut milk|full fat coconut milk"),
+    (
+        "coconut milk",
+        "condiment",
+        "cup",
+        "canned coconut milk|light coconut milk|full fat coconut milk",
+    ),
     ("chicken broth", "condiment", "cup", "chicken stock|broth|low sodium chicken broth"),
     ("vegetable broth", "condiment", "cup", "vegetable stock|veggie broth"),
     ("beef broth", "condiment", "cup", "beef stock|low sodium beef broth"),
     ("tomato paste", "condiment", "tbsp", "double concentrated tomato paste"),
-    ("canned tomatoes", "condiment", "cup", "crushed tomatoes|diced tomatoes|whole peeled tomatoes"),
+    (
+        "canned tomatoes",
+        "condiment",
+        "cup",
+        "crushed tomatoes|diced tomatoes|whole peeled tomatoes",
+    ),
     # Baking
     ("granulated sugar", "baking", "cup", "white sugar|sugar|cane sugar"),
     ("brown sugar", "baking", "cup", "light brown sugar|dark brown sugar|packed brown sugar"),
@@ -324,7 +349,12 @@ rows = [
     ("active dry yeast", "baking", "tsp", "yeast|instant yeast|bread yeast"),
     ("vanilla extract", "baking", "tsp", "pure vanilla extract|vanilla essence"),
     ("cocoa powder", "baking", "cup", "unsweetened cocoa|dutch process cocoa|raw cacao"),
-    ("chocolate chips", "baking", "cup", "semi sweet chocolate chips|dark chocolate chips|mini chocolate chips"),
+    (
+        "chocolate chips",
+        "baking",
+        "cup",
+        "semi sweet chocolate chips|dark chocolate chips|mini chocolate chips",
+    ),
     ("dark chocolate", "baking", "oz", "bittersweet chocolate|70% dark chocolate"),
     ("milk chocolate", "baking", "oz", "milk chocolate bar|milk chocolate pieces"),
     ("white chocolate", "baking", "oz", "white chocolate chips|white chocolate bar"),
@@ -361,4 +391,4 @@ with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
     for row in rows:
         writer.writerow(list(row))
 
-print(f"Written {len(rows)} data rows + 1 header = {len(rows)+1} total lines")
+print(f"Written {len(rows)} data rows + 1 header = {len(rows) + 1} total lines")

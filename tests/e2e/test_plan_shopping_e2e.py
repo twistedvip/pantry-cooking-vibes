@@ -40,7 +40,7 @@ def test_shopping_list_separates_needed_from_covered(live_server, page):
     body = page.content()
     assert "qualitative" in body.lower(), "v1 quantity disclaimer must remain visible"
 
-    needed_section = page.locator('section').filter(has_text="Need to buy")
+    needed_section = page.locator("section").filter(has_text="Need to buy")
     assert needed_section.count() >= 1
     needed_text = needed_section.first.inner_text().lower()
     assert "chicken breast" in needed_text
@@ -49,7 +49,7 @@ def test_shopping_list_separates_needed_from_covered(live_server, page):
         "olive oil is in the pantry — must not appear in 'need to buy'"
     )
 
-    covered_section = page.locator('section').filter(has_text="Already in pantry")
+    covered_section = page.locator("section").filter(has_text="Already in pantry")
     assert covered_section.count() >= 1
     covered_text = covered_section.first.inner_text().lower()
     assert "olive oil" in covered_text

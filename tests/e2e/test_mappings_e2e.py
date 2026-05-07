@@ -27,7 +27,7 @@ def test_mapping_approve_from_detail_moves_to_approved(live_server, page):
     page.goto(f"{live_server}/mappings")
     page.wait_for_load_state("networkidle")
 
-    page.locator('a').filter(has_text="lemon zest").first.click()
+    page.locator("a").filter(has_text="lemon zest").first.click()
     page.wait_for_load_state("networkidle")
     assert "/mappings/" in page.url
 
@@ -46,7 +46,7 @@ def test_mapping_reject_from_list_dismisses_row(live_server, page):
     page.goto(f"{live_server}/mappings")
     page.wait_for_load_state("networkidle")
 
-    row = page.locator('tr').filter(has_text="mystery spice").first
+    row = page.locator("tr").filter(has_text="mystery spice").first
     page.once("dialog", lambda d: d.accept())
     row.locator('form[action$="/reject"] button').click()
     page.wait_for_load_state("networkidle")

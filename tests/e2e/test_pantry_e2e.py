@@ -19,9 +19,7 @@ def test_pantry_add_then_remove_round_trips(live_server, page):
     page.click('form.filters button[type="submit"]')
     page.wait_for_load_state("networkidle")
 
-    suggestion = page.locator('ul.suggestions form.add-form').filter(
-        has_text="salt"
-    ).first
+    suggestion = page.locator("ul.suggestions form.add-form").filter(has_text="salt").first
     assert suggestion.count() == 1, "expected exactly one 'salt' suggestion form"
 
     suggestion.locator('input[name="quantity"]').fill("3")
@@ -32,7 +30,7 @@ def test_pantry_add_then_remove_round_trips(live_server, page):
     assert "added" in page.url
     assert "✓ Added" in page.content()
 
-    pantry_row = page.locator('.pantry-item').filter(has_text="salt")
+    pantry_row = page.locator(".pantry-item").filter(has_text="salt")
     assert pantry_row.count() >= 1, "salt should now appear in 'In your pantry'"
 
     page.once("dialog", lambda d: d.accept())
@@ -40,7 +38,7 @@ def test_pantry_add_then_remove_round_trips(live_server, page):
     page.wait_for_load_state("networkidle")
 
     assert "removed" in page.url
-    assert page.locator('.pantry-item').filter(has_text="salt").count() == 0
+    assert page.locator(".pantry-item").filter(has_text="salt").count() == 0
 
 
 def test_pantry_invalid_search_shows_empty_state(live_server, page):

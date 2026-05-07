@@ -103,7 +103,7 @@ def _iter_entities(obj: Any) -> Iterable[dict]:
         else:
             yield obj
             for v in obj.values():
-                if isinstance(v, (dict, list)):
+                if isinstance(v, (dict | list)):
                     yield from _iter_entities(v)
     elif isinstance(obj, list):
         for item in obj:
@@ -160,7 +160,7 @@ def parse_yield(value: Any) -> int | None:
             if n is not None:
                 return n
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, (int | float)):
         n = int(value)
         return n if n >= 1 else None
     if isinstance(value, str):

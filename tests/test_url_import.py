@@ -171,7 +171,8 @@ def test_collect_tags_dedups_case_insensitive():
 
 def test_extract_handles_list_block():
     html = '<script type="application/ld+json">[{"@type":"Recipe","name":"X"}]</script>'
-    assert extract_recipe_jsonld(html)["name"] == "X"
+    extracted = extract_recipe_jsonld(html)
+    assert extracted is not None and extracted["name"] == "X"
 
 
 def test_extract_handles_graph_wrapper():
@@ -180,12 +181,14 @@ def test_extract_handles_graph_wrapper():
         '{"@graph":[{"@type":"WebPage"},{"@type":"Recipe","name":"Y"}]}'
         "</script>"
     )
-    assert extract_recipe_jsonld(html)["name"] == "Y"
+    extracted = extract_recipe_jsonld(html)
+    assert extracted is not None and extracted["name"] == "Y"
 
 
 def test_extract_handles_array_type():
     html = '<script type="application/ld+json">{"@type":["Recipe","Article"],"name":"Z"}</script>'
-    assert extract_recipe_jsonld(html)["name"] == "Z"
+    extracted = extract_recipe_jsonld(html)
+    assert extracted is not None and extracted["name"] == "Z"
 
 
 def test_extract_returns_none_when_no_recipe():
@@ -198,7 +201,8 @@ def test_extract_skips_invalid_json_blocks():
         '<script type="application/ld+json">{not json}</script>'
         '<script type="application/ld+json">{"@type":"Recipe","name":"OK"}</script>'
     )
-    assert extract_recipe_jsonld(html)["name"] == "OK"
+    extracted = extract_recipe_jsonld(html)
+    assert extracted is not None and extracted["name"] == "OK"
 
 
 def test_extract_no_jsonld_at_all():
@@ -419,9 +423,7 @@ def test_import_url_missing_image_raises_and_does_not_write(db_path):
     with pytest.raises(RecipeMissingImageError):
         import_url("https://example.com/noimg", db_path=db_path, html=html, quiet=True)
     with connect(db_path) as conn:
-        n = conn.execute(
-            "SELECT COUNT(*) FROM recipes WHERE source='url'"
-        ).fetchone()[0]
+        n = conn.execute("SELECT COUNT(*) FROM recipes WHERE source='url'").fetchone()[0]
     assert n == 0
 
 

@@ -18,10 +18,10 @@ def test_favorite_toggle_from_list_preserves_query(live_server, page):
     page.goto(list_url)
     page.wait_for_load_state("networkidle")
 
-    card = page.locator('li.recipe-card').filter(has_text="Lemon Chicken Skillet").first
+    card = page.locator("li.recipe-card").filter(has_text="Lemon Chicken Skillet").first
     assert card.count() == 1
 
-    fav_btn = card.locator('button.fav-btn')
+    fav_btn = card.locator("button.fav-btn")
     initially_on = "on" in (fav_btn.get_attribute("class") or "")
 
     fav_btn.click()
@@ -30,17 +30,17 @@ def test_favorite_toggle_from_list_preserves_query(live_server, page):
     assert "q=chicken" in page.url, "redirect_to must preserve query string"
     assert "max_time=30" in page.url
 
-    card_after = page.locator('li.recipe-card').filter(has_text="Lemon Chicken Skillet").first
-    fav_btn_after = card_after.locator('button.fav-btn')
+    card_after = page.locator("li.recipe-card").filter(has_text="Lemon Chicken Skillet").first
+    fav_btn_after = card_after.locator("button.fav-btn")
     now_on = "on" in (fav_btn_after.get_attribute("class") or "")
     assert now_on != initially_on, "favorite state should have flipped"
 
     fav_btn_after.click()
     page.wait_for_load_state("networkidle")
     final_btn = (
-        page.locator('li.recipe-card')
+        page.locator("li.recipe-card")
         .filter(has_text="Lemon Chicken Skillet")
-        .first.locator('button.fav-btn')
+        .first.locator("button.fav-btn")
     )
     final_on = "on" in (final_btn.get_attribute("class") or "")
     assert final_on == initially_on, "second toggle should restore original state"
@@ -50,8 +50,8 @@ def test_favorite_only_filter_shows_only_favorites(live_server, page):
     page.goto(f"{live_server}/recipes")
     page.wait_for_load_state("networkidle")
 
-    target = page.locator('li.recipe-card').filter(has_text="Vegan Tofu Bowl").first
-    fav_btn = target.locator('button.fav-btn')
+    target = page.locator("li.recipe-card").filter(has_text="Vegan Tofu Bowl").first
+    fav_btn = target.locator("button.fav-btn")
     if "on" not in (fav_btn.get_attribute("class") or ""):
         fav_btn.click()
         page.wait_for_load_state("networkidle")
@@ -60,10 +60,8 @@ def test_favorite_only_filter_shows_only_favorites(live_server, page):
     page.wait_for_load_state("networkidle")
     body = page.content()
     assert "Vegan Tofu Bowl" in body
-    assert "Lemon Chicken Skillet" not in body, (
-        "fav=1 must hide non-favorited recipes"
-    )
+    assert "Lemon Chicken Skillet" not in body, "fav=1 must hide non-favorited recipes"
 
-    final = page.locator('li.recipe-card').filter(has_text="Vegan Tofu Bowl").first
-    final.locator('button.fav-btn').click()
+    final = page.locator("li.recipe-card").filter(has_text="Vegan Tofu Bowl").first
+    final.locator("button.fav-btn").click()
     page.wait_for_load_state("networkidle")

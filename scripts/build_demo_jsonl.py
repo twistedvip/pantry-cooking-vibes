@@ -51,6 +51,7 @@ def _fetch_html_no_brotli(url: str) -> str:
     response.raise_for_status()
     return response.text
 
+
 DEFAULT_URL = "https://therecipecritic.com/chicken-fried-rice"
 DEFAULT_SOURCE_ID = "chicken-fried-rice"
 OUT_PATH = REPO_ROOT / "data" / "seed" / "demo.jsonl"
@@ -71,9 +72,7 @@ def build_record(url: str, source_id: str) -> dict:
     nutrition_dict = project_nutrition(entity.get("nutrition")) or None
 
     ingredients = [
-        {"original_text": text}
-        for text in parsed["ingredients"]
-        if text and text.strip()
+        {"original_text": text} for text in parsed["ingredients"] if text and text.strip()
     ]
 
     record: dict = {

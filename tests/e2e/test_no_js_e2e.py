@@ -34,9 +34,9 @@ def test_recipe_search_works_with_js_disabled(live_server, browser):
 
 def _chicken_fav_btn(page):
     return (
-        page.locator('li.recipe-card')
+        page.locator("li.recipe-card")
         .filter(has_text="Lemon Chicken Skillet")
-        .first.locator('button.fav-btn')
+        .first.locator("button.fav-btn")
     )
 
 

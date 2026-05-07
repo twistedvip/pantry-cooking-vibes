@@ -29,7 +29,7 @@ def _to_float(v: object) -> float | None:
     if v is None or v == "":
         return None
     try:
-        if isinstance(v, (int, float)):
+        if isinstance(v, (int | float)):
             return float(v)
         return float(str(v))
     except (TypeError, ValueError):
@@ -40,7 +40,7 @@ def _to_int(v: object) -> int | None:
     if v is None or v == "":
         return None
     try:
-        if isinstance(v, (int, float)):
+        if isinstance(v, (int | float)):
             return int(v)
         return int(str(v))
     except (TypeError, ValueError):

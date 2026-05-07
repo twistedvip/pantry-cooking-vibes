@@ -325,11 +325,13 @@ def test_add_and_remove_recipe_in_plan(seeded_db_path):
     assert item["day"] == "mon" and item["servings_planned"] == 2
 
     detail = tools.get_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert detail is not None
     assert len(detail["items"]) == 1
     assert "recipe_name" in detail["items"][0]
 
     assert tools.remove_meal_plan_item(item["id"], db_path=seeded_db_path)["removed"] is True
-    assert tools.get_meal_plan(plan["id"], db_path=seeded_db_path)["items"] == []
+    after = tools.get_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert after is not None and after["items"] == []
 
 
 @pytest.mark.parametrize(

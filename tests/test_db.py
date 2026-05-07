@@ -77,10 +77,7 @@ def test_migration_004_purges_image_less_recipes(db_path):
         ).fetchone()[0]
         assert orphan_tags == 0
 
-        fts_ids = {
-            r[0]
-            for r in conn.execute("SELECT rowid FROM recipes_fts").fetchall()
-        }
+        fts_ids = {r[0] for r in conn.execute("SELECT rowid FROM recipes_fts").fetchall()}
         assert null_img not in fts_ids and blank_img not in fts_ids
 
 
