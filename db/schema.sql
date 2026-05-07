@@ -133,6 +133,13 @@ CREATE TABLE IF NOT EXISTS meal_plans (
 CREATE INDEX IF NOT EXISTS idx_meal_plans_week_of
     ON meal_plans (week_of);
 
+-- Partial unique index: at most one draft plan per week_of. Confirmed plans
+-- are unconstrained (multiple confirmed plans for the same week are fine).
+-- Originally added in migration 005; included here so fresh DBs get the same
+-- invariant as migrated ones.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_week_draft
+    ON meal_plans (week_of) WHERE status = 'draft';
+
 -- ---------------------------------------------------------------------------
 -- meal_plan_items
 -- ---------------------------------------------------------------------------
@@ -188,3 +195,20 @@ CREATE INDEX IF NOT EXISTS idx_ingredient_mapping_queue_status
 
 CREATE INDEX IF NOT EXISTS idx_ingredient_mapping_queue_source_key
     ON ingredient_mapping_queue (source, source_key);
+
+-- ---------------------------------------------------------------------------
+-- recipe_favorites  (originally migration 001)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS recipe_favorites (
+    recipe_id    INTEGER PRIMARY KEY,
+    favorited_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------
+-- meal_plan_favorites  (originally migration 005)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS meal_plan_favorites (
+    plan_id    INTEGER PRIMARY KEY REFERENCES meal_plans(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

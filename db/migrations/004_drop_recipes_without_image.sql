@@ -7,7 +7,7 @@
 --
 -- Cascading cleanup is handled by ON DELETE CASCADE on recipe_ingredients,
 -- recipe_tags, meal_plan_items, and recipe_favorites. The recipes_ad trigger
--- keeps recipes_fts in sync row-by-row.
+-- keeps the external-content recipes_fts index in sync row-by-row.
 
 DELETE FROM recipes
  WHERE image_url IS NULL

@@ -15,6 +15,7 @@ the raw record dicts before validation.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -29,6 +30,8 @@ from pantry_cooking_vibes.models import (
     RecipeRecord,
 )
 
+log = logging.getLogger(__name__)
+
 
 class IngestStats(TypedDict):
     processed: int
@@ -40,24 +43,30 @@ class IngestStats(TypedDict):
 
 def _iter_jsonl(path: Path) -> Iterator[dict]:
     with path.open(encoding="utf-8") as fh:
-        for line in fh:
+        for lineno, line in enumerate(fh, start=1):
             line = line.strip()
             if not line:
                 continue
             try:
                 yield json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                log.warning("skipping malformed JSONL at %s:%d (%s)", path, lineno, e)
                 continue
 
 
 def _load_canonical_map(conn: sqlite3.Connection, source: str) -> dict[str, int]:
-    """source_key -> canonical_id from the mapping queue, scoped to ``source``."""
+    """source_key -> canonical_id from the mapping queue, scoped to ``source``.
+
+    Only reads ``status='approved'`` rows. Proposed (un-reviewed) mappings are
+    intentionally excluded so ingest never wires recipe_ingredients to a
+    canonical the curator hasn't sign off on. Mirrors ``apply_text_mappings``.
+    """
     rows = conn.execute(
         """
         SELECT source_key, proposed_canonical_id
         FROM ingredient_mapping_queue
         WHERE source = ?
-          AND status IN ('approved', 'proposed')
+          AND status = 'approved'
           AND proposed_canonical_id IS NOT NULL
         """,
         (source,),
@@ -176,8 +185,14 @@ def ingest_jsonl(
     is loaded via entry-point and its ``post_process(records)`` runs on
     the raw dicts before Pydantic validation.
 
-    Records that fail ``RecipeRecord`` validation are counted as ``skipped``
-    and ingest continues with the next line.
+    **Transaction semantics**: this is a best-effort batched importer.
+    ``conn.commit()`` is called every ``batch_size`` recipes so progress is
+    durable on long files. If a row triggers a ``ValidationError`` it is
+    counted as ``skipped`` and ingest continues. Other exceptions
+    (sqlite IntegrityError, plugin TypeError, etc.) propagate; rows from
+    the current uncommitted batch are rolled back, but earlier committed
+    batches remain. Malformed JSONL lines that fail ``json.loads`` are
+    silently skipped and counted into ``skipped``.
     """
     if not jsonl_path.exists():
         raise FileNotFoundError(jsonl_path)

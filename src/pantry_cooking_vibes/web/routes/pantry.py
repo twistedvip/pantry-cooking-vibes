@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 from pantry_cooking_vibes.mcp_server import tools
-from pantry_cooking_vibes.web.deps import get_db_path, render
+from pantry_cooking_vibes.web.deps import get_db_path, render, url_quote as _q
 
 router = APIRouter(prefix="/pantry")
 
@@ -106,9 +106,3 @@ def pantry_delete(
         url=f"/pantry?error=item%20{item_id}%20not%20found",
         status_code=303,
     )
-
-
-def _q(s: str) -> str:
-    from urllib.parse import quote
-
-    return quote(s, safe="")

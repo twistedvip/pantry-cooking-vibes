@@ -9,7 +9,6 @@ approve (with optional canonical override) or reject. SQL lives in
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -19,13 +18,9 @@ from pantry_cooking_vibes.importers.normalize import (
     reject_mapping as _reject_mapping,
 )
 from pantry_cooking_vibes.mcp_server import tools
-from pantry_cooking_vibes.web.deps import get_db_path, render
+from pantry_cooking_vibes.web.deps import get_db_path, render, url_quote as _q
 
 router = APIRouter(prefix="/mappings")
-
-
-def _q(s: str) -> str:
-    return quote(s, safe="")
 
 
 @router.get("")

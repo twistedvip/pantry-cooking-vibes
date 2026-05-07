@@ -290,13 +290,17 @@ def parse_recipe(entity: dict, url: str) -> dict:
 
 
 def _load_canonical_map(conn: sqlite3.Connection) -> dict[str, int]:
-    """Map raw ingredient text -> canonical_id from the URL-import review queue."""
+    """Map raw ingredient text -> canonical_id from the URL-import review queue.
+
+    Only reads ``status='approved'`` rows so ingest never wires
+    recipe_ingredients to a canonical the curator hasn't approved.
+    """
     rows = conn.execute(
         """
         SELECT source_key, proposed_canonical_id
         FROM ingredient_mapping_queue
         WHERE source = 'url_import'
-          AND status IN ('approved', 'proposed')
+          AND status = 'approved'
           AND proposed_canonical_id IS NOT NULL
         """
     ).fetchall()
@@ -332,10 +336,9 @@ def _enqueue_ingredients(
             continue
         result = normalize_text(text, choices, choice_to_id)
         upsert_mapping(conn, "url_import", result, overwrite=False)
-        if result.proposed_canonical_id is not None and result.status in (
-            "approved",
-            "proposed",
-        ):
+        # Only apply auto-approved hits (>=85% confidence). Proposed (70-84%) and
+        # no_match rows wait for human review before being wired to recipe_ingredients.
+        if result.proposed_canonical_id is not None and result.status == "approved":
             out[text] = result.proposed_canonical_id
     return out
 

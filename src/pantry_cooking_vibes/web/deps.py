@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -31,3 +32,8 @@ def render(request: Request, template: str, context: dict) -> Response:
 
 def safe_redirect(target: str | None, fallback: str) -> str:
     return target if target and target.startswith("/") else fallback
+
+
+def url_quote(s: str) -> str:
+    """URL-encode a string for use in a query parameter (no safe chars)."""
+    return quote(s, safe="")

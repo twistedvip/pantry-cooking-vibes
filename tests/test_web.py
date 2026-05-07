@@ -577,26 +577,34 @@ def test_app_factory_importable():
 
 
 def test_serve_web_applies_pending_migrations(tmp_path, monkeypatch):
-    """Regression: a DB created before a migration was added (schema.sql applied,
-    schema_migrations empty) used to crash /recipes with 'no such table:
-    recipe_favorites'. serve-web must bring the DB up to date before uvicorn starts."""
+    """Regression: a DB created before migrations were tracked (schema applied,
+    schema_migrations empty, user_version=0) used to crash. serve-web must
+    bring the DB up to date before uvicorn starts.
+
+    Even though schema.sql now creates the favorites tables directly (so a
+    fresh DB doesn't need migrations), this test still verifies that the
+    serve-web bootstrap runs the migration sweep against a stale DB.
+    """
     from typer.testing import CliRunner
 
     from pantry_cooking_vibes.cli import app as cli_app
     from pantry_cooking_vibes.db import apply_schema, get_connection
 
-    # Simulate the pre-migration state: schema applied, no migrations run.
+    # Simulate the pre-migration state: schema applied, schema_migrations empty,
+    # user_version reset to 0 (the legacy state migrations are designed to repair).
     db = tmp_path / "stale.db"
     conn = get_connection(db)
     try:
         apply_schema(conn)
+        conn.execute("PRAGMA user_version = 0")
+        conn.execute("DROP TABLE IF EXISTS schema_migrations")
         conn.commit()
     finally:
         conn.close()
 
     with get_connection(db) as conn:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "recipe_favorites" not in tables, "precondition: DB is pre-migration"
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert version == 0, "precondition: DB is pre-migration"
 
     # Stub uvicorn so serve-web runs its bootstrap without actually binding a port.
     invoked = {}
@@ -612,10 +620,12 @@ def test_serve_web_applies_pending_migrations(tmp_path, monkeypatch):
     assert "Applied pending migrations" in result.output
     assert "001_recipe_favorites.sql" in result.output
 
-    # The previously missing table must exist now, so the web UI won't crash.
+    # After serve-web bootstrap, user_version reflects the highest applied migration.
     with get_connection(db) as conn:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "recipe_favorites" in tables
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        recorded = {r[0] for r in conn.execute("SELECT filename FROM schema_migrations").fetchall()}
+    assert version > 0
+    assert "001_recipe_favorites.sql" in recorded
 
 
 def test_db_backup_missing_source_exits_cleanly(tmp_path):

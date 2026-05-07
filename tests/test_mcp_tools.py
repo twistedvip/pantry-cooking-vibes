@@ -297,6 +297,13 @@ def test_create_meal_plan_invalid_week(seeded_db_path):
         tools.create_meal_plan("not-a-date", db_path=seeded_db_path)
 
 
+@pytest.mark.parametrize("bad", ["2026-02-30", "2026-13-01", "2026-99-99"])
+def test_create_meal_plan_rejects_impossible_dates(seeded_db_path, bad):
+    """Regex format alone isn't enough; impossible calendar dates must also be rejected."""
+    with pytest.raises(ValueError):
+        tools.create_meal_plan(bad, db_path=seeded_db_path)
+
+
 def test_create_meal_plan_basic(seeded_db_path):
     plan = tools.create_meal_plan("2026-05-04", notes="test", db_path=seeded_db_path)
     assert plan["status"] == "draft"
