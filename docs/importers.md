@@ -107,7 +107,7 @@ backfill_recipe_canonicals(db_path, quiet)
    ├─ _clean(text): strip brand/packaging/unit noise
    ├─ process.extractOne(cleaned, choices, scorer=WRatio)
    │
-   ├─ if score >= AUTO_APPROVE_THRESHOLD (90):
+   ├─ if score >= AUTO_APPROVE_THRESHOLD (85):
    │     write canonical_id directly to recipe_ingredients,
    │     also queue as 'approved' for audit trail
    │

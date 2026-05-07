@@ -26,7 +26,7 @@ _STRIP_WORDS = re.compile(
     re.IGNORECASE,
 )
 
-AUTO_APPROVE_THRESHOLD = 90.0  # score ≥ this → auto-approve
+AUTO_APPROVE_THRESHOLD = 85.0  # score ≥ this → auto-approve
 PROPOSE_THRESHOLD = 70.0  # score < this → no_match (confidence=0). 70 is the
 # rapidfuzz WRatio review-queue rule of thumb; below
 # that, hits are mostly noise that wastes reviewer time.
@@ -259,8 +259,8 @@ def backfill_recipe_canonicals(*, db_path: Path | None = None, quiet: bool = Fal
     """Backfill ``recipe_ingredients.canonical_id`` directly from distinct
     ``original_text`` values via the same fuzzy matcher used by ``run_normalization``.
 
-    Auto-writes when the match clears ``AUTO_APPROVE_THRESHOLD`` (≥90).
-    Proposed (70–89) and no_match texts are queued in
+    Auto-writes when the match clears ``AUTO_APPROVE_THRESHOLD`` (≥85).
+    Proposed (70–84) and no_match texts are queued in
     ``ingredient_mapping_queue`` under source ``recipe_ingredient_text`` so
     they show up in ``review-mappings``. Never overwrites a row that already
     has a ``canonical_id``.

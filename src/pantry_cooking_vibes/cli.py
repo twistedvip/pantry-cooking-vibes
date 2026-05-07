@@ -35,7 +35,7 @@ def normalize_recipes(
 ) -> None:
     """Backfill recipe_ingredients.canonical_id by fuzzy-matching original_text.
 
-    Auto-writes only matches that clear the AUTO_APPROVE_THRESHOLD (≥90).
+    Auto-writes only matches that clear the AUTO_APPROVE_THRESHOLD (≥85).
     Skips rows that already have a canonical_id.
     """
     from pantry_cooking_vibes.importers.normalize import backfill_recipe_canonicals
