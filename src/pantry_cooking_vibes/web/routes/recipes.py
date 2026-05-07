@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from pantry_cooking_vibes.mcp_server import tools
-from pantry_cooking_vibes.web.deps import get_db_path, render
+from pantry_cooking_vibes.web.deps import get_db_path, render, safe_redirect
 
 router = APIRouter(prefix="/recipes")
 
@@ -146,5 +146,20 @@ def toggle_favorite(
         tools.set_recipe_favorite(recipe_id, want_fav, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found") from e
-    dest = redirect_to if redirect_to.startswith("/") else f"/recipes/{recipe_id}"
+    dest = safe_redirect(redirect_to, f"/recipes/{recipe_id}")
+    return RedirectResponse(url=dest, status_code=303)
+
+
+@router.post("/{recipe_id}/add-to-current-week")
+def add_to_current_week(
+    recipe_id: int,
+    redirect_to: str = Form(""),
+    db_path: Path = Depends(get_db_path),
+) -> RedirectResponse:
+    """Add a recipe to the current week's draft meal plan."""
+    try:
+        result = tools.add_to_current_week_plan(recipe_id, db_path=db_path)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    dest = safe_redirect(redirect_to, f"/plans/{result['plan_id']}")
     return RedirectResponse(url=dest, status_code=303)

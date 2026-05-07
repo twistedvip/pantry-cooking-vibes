@@ -429,3 +429,243 @@ def test_build_server_registers_all_tools():
         "compute_shopping_list",
     }
     assert expected == names
+
+
+# ---------- AC12: user-only tools NOT in MCP server ----------
+
+
+def test_user_only_tools_not_in_mcp_server():
+    """set_recipe_favorite and set_meal_plan_favorite must NOT be MCP-exposed."""
+    from pantry_cooking_vibes.mcp_server.server import build_server
+
+    s = build_server()
+    listed = asyncio.run(s.list_tools())
+    names = {t.name for t in listed}
+    assert "set_recipe_favorite" not in names
+    assert "set_meal_plan_favorite" not in names
+
+
+# ---------- add_to_current_week_plan ----------
+
+
+def test_add_to_current_week_plan_creates_draft(seeded_db_path):
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    result = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+    assert "plan_id" in result and "item" in result
+    item = result["item"]
+    assert item["recipe_id"] == recipe["id"]
+    assert item["day"] is None and item["meal_slot"] is None
+    assert item["servings_planned"] == 1
+
+    plan = tools.get_meal_plan(result["plan_id"], db_path=seeded_db_path)
+    assert plan is not None
+    assert plan["status"] == "draft"
+    from pantry_cooking_vibes.dates import current_sunday
+
+    assert plan["week_of"] == current_sunday().isoformat()
+
+
+def test_add_to_current_week_plan_reuses_existing_draft(seeded_db_path):
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    r1 = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+    r2 = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+    assert r1["plan_id"] == r2["plan_id"]
+
+
+def test_add_to_current_week_plan_duplicates(seeded_db_path):
+    """Adding same recipe twice creates two distinct meal_plan_items rows."""
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    r1 = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+    r2 = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+    assert r1["plan_id"] == r2["plan_id"]
+    assert r1["item"]["id"] != r2["item"]["id"]
+
+    plan = tools.get_meal_plan(r1["plan_id"], db_path=seeded_db_path)
+    assert plan is not None
+    matching = [i for i in plan["items"] if i["recipe_id"] == recipe["id"]]
+    assert len(matching) == 2
+
+
+def test_add_to_current_week_plan_missing_recipe_raises(seeded_db_path):
+    with pytest.raises(ValueError, match="not found"):
+        tools.add_to_current_week_plan(99999, db_path=seeded_db_path)
+
+
+# ---------- set_meal_plan_favorite ----------
+
+
+def test_set_meal_plan_favorite_toggle(seeded_db_path):
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    result = tools.set_meal_plan_favorite(plan["id"], True, db_path=seeded_db_path)
+    assert result["is_favorite"] is True
+
+    fetched = tools.get_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert fetched is not None
+    assert fetched["is_favorite"] is True
+
+    result = tools.set_meal_plan_favorite(plan["id"], False, db_path=seeded_db_path)
+    assert result["is_favorite"] is False
+
+    fetched = tools.get_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert fetched is not None
+    assert fetched["is_favorite"] is False
+
+
+def test_list_meal_plans_orders_favorites_first(seeded_db_path):
+    p1 = tools.create_meal_plan("2026-04-06", db_path=seeded_db_path)
+    tools.create_meal_plan("2026-04-13", db_path=seeded_db_path)
+    tools.create_meal_plan("2026-04-20", db_path=seeded_db_path)
+
+    tools.set_meal_plan_favorite(p1["id"], True, db_path=seeded_db_path)
+
+    plans = tools.list_meal_plans(db_path=seeded_db_path)
+    ids = [p["id"] for p in plans]
+    assert ids[0] == p1["id"]  # favorite first despite oldest week_of
+
+
+# ---------- clone_meal_plan ----------
+
+
+def test_clone_meal_plan_basic(seeded_db_path):
+    plan = tools.create_meal_plan("2026-04-13", notes="original", db_path=seeded_db_path)
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    tools.add_recipe_to_plan(plan["id"], recipe["id"], day="mon", db_path=seeded_db_path)
+
+    cloned = tools.clone_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert cloned["id"] != plan["id"]
+    assert cloned["status"] == "draft"
+    assert cloned["notes"].startswith(f"Cloned from #{plan['id']}.")
+    assert cloned["item_count"] == 1
+
+    from datetime import date
+
+    cloned_date = date.fromisoformat(cloned["week_of"])
+    assert cloned_date.weekday() == 6  # must be a Sunday
+
+
+def test_clone_meal_plan_empty(seeded_db_path):
+    plan = tools.create_meal_plan("2026-04-13", db_path=seeded_db_path)
+    cloned = tools.clone_meal_plan(plan["id"], db_path=seeded_db_path)
+    assert cloned["item_count"] == 0
+
+
+def test_clone_meal_plan_missing_raises(seeded_db_path):
+    with pytest.raises(ValueError, match="not found"):
+        tools.clone_meal_plan(99999, db_path=seeded_db_path)
+
+
+# ---------- compute_pantry_coverage ----------
+
+
+def test_compute_pantry_coverage_empty_plan(seeded_db_path):
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    cov = tools.compute_pantry_coverage(plan["id"], db_path=seeded_db_path)
+    assert cov == {"plan_id": plan["id"], "covered": 0, "total": 0, "percent": 0, "missing": []}
+
+
+def test_compute_pantry_coverage_all_covered(seeded_db_path):
+    """A plan with only broccoli-based recipes; broccoli is in pantry -> 100%."""
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    with connect(seeded_db_path) as conn:
+        soup_id = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Soup'").fetchone()["id"]
+    tools.add_recipe_to_plan(plan["id"], soup_id, db_path=seeded_db_path)
+    cov = tools.compute_pantry_coverage(plan["id"], db_path=seeded_db_path)
+    assert cov["percent"] == 100
+    assert cov["covered"] == cov["total"]
+
+
+def test_compute_pantry_coverage_none_covered(seeded_db_path):
+    """Stir fry needs broccoli + other. Remove broccoli from pantry -> 0%."""
+    with connect(seeded_db_path) as conn:
+        conn.execute("DELETE FROM pantry")
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    with connect(seeded_db_path) as conn:
+        stir_fry_id = conn.execute(
+            "SELECT id FROM recipes WHERE name='Broccoli Stir Fry'"
+        ).fetchone()["id"]
+    tools.add_recipe_to_plan(plan["id"], stir_fry_id, db_path=seeded_db_path)
+    cov = tools.compute_pantry_coverage(plan["id"], db_path=seeded_db_path)
+    assert cov["percent"] == 0
+    assert cov["covered"] == 0
+    assert cov["total"] == 2
+    assert len(cov["missing"]) == 2
+
+
+def test_compute_pantry_coverage_mixed(seeded_db_path):
+    """Stir fry has broccoli (in pantry) + other (not in pantry) -> 50%."""
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    with connect(seeded_db_path) as conn:
+        stir_fry_id = conn.execute(
+            "SELECT id FROM recipes WHERE name='Broccoli Stir Fry'"
+        ).fetchone()["id"]
+    tools.add_recipe_to_plan(plan["id"], stir_fry_id, db_path=seeded_db_path)
+    cov = tools.compute_pantry_coverage(plan["id"], db_path=seeded_db_path)
+    assert cov["total"] == 2
+    assert cov["covered"] == 1
+    assert cov["percent"] == 50
+
+
+# ---------- remove_meal_plan_item_from_plan ----------
+
+
+def test_remove_meal_plan_item_from_plan_match(seeded_db_path):
+    plan = tools.create_meal_plan("2026-05-04", db_path=seeded_db_path)
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    item = tools.add_recipe_to_plan(plan["id"], recipe["id"], db_path=seeded_db_path)
+    result = tools.remove_meal_plan_item_from_plan(plan["id"], item["id"], db_path=seeded_db_path)
+    assert result["removed"] is True
+
+
+def test_remove_meal_plan_item_from_plan_mismatch(seeded_db_path):
+    p1 = tools.create_meal_plan("2026-04-06", db_path=seeded_db_path)
+    p2 = tools.create_meal_plan("2026-04-13", db_path=seeded_db_path)
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    item = tools.add_recipe_to_plan(p1["id"], recipe["id"], db_path=seeded_db_path)
+    with pytest.raises(ValueError):
+        tools.remove_meal_plan_item_from_plan(p2["id"], item["id"], db_path=seeded_db_path)
+
+
+# ---------- concurrency (AC11) ----------
+
+
+def test_add_to_current_week_plan_concurrent(seeded_db_path):
+    """Two threads with Barrier(2) produce exactly 1 meal_plans row and 2 meal_plan_items."""
+    import threading
+
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    barrier = threading.Barrier(2, timeout=10)
+    results = [None, None]
+    errors = [None, None]
+
+    def worker(idx):
+        try:
+            barrier.wait()
+            results[idx] = tools.add_to_current_week_plan(recipe["id"], db_path=seeded_db_path)
+        except Exception as e:
+            errors[idx] = e
+
+    t1 = threading.Thread(target=worker, args=(0,))
+    t2 = threading.Thread(target=worker, args=(1,))
+    t1.start()
+    t2.start()
+    t1.join(timeout=15)
+    t2.join(timeout=15)
+
+    assert errors[0] is None and errors[1] is None
+    assert results[0] is not None and results[1] is not None
+    assert results[0]["plan_id"] == results[1]["plan_id"]
+
+    from pantry_cooking_vibes.dates import current_sunday
+
+    sunday = current_sunday().isoformat()
+    with connect(seeded_db_path) as conn:
+        plan_count = conn.execute(
+            "SELECT COUNT(*) FROM meal_plans WHERE week_of = ? AND status = 'draft'",
+            (sunday,),
+        ).fetchone()[0]
+        item_count = conn.execute(
+            "SELECT COUNT(*) FROM meal_plan_items WHERE plan_id = ?",
+            (results[0]["plan_id"],),
+        ).fetchone()[0]
+    assert plan_count == 1
+    assert item_count == 2

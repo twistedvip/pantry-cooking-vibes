@@ -1,0 +1,19 @@
+{% extends "print_base.html" %}
+{% block title %}Plan {{ plan.week_of }} — Print{% endblock %}
+{% block content %}
+<section data-role="ingredients-page">
+  <h1>Ingredients — Week of {{ plan.week_of }}</h1>
+  <ul>
+    {% for ing in ingredients %}
+    <li>{{ ing.name }}{% if ing.category %} <span class="category">({{ ing.category }})</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% for item in plan['items'] %}
+<section data-role="recipe-page" style="page-break-before: always">
+  <h2>{{ item.recipe_name }}</h2>
+  <p>Servings: {{ item.servings_planned }}{% if item.cooking_time_min %} · {{ item.cooking_time_min }} min{% endif %}</p>
+</section>
+{% endfor %}
+{% endblock %}

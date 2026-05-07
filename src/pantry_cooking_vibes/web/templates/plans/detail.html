@@ -9,10 +9,25 @@
     <h1>Week of {{ plan.week_of }}</h1>
     <div class="row gap-8 wrap">
       <span class="status-{{ plan.status }}">{{ plan.status }}</span>
+      <span class="coverage-chip chip acc">{{ plan.coverage.percent }}% pantry</span>
       {% if plan.created_at %}<span class="label">created {{ plan.created_at }}</span>{% endif %}
     </div>
   </div>
-  <a class="btn primary" href="/plans/{{ plan.id }}/shopping">Shopping list →</a>
+  <div class="row gap-8 wrap">
+    <form class="fav-toggle" method="post" action="/plans/{{ plan.id }}/favorite">
+      <input type="hidden" name="favorite" value="{{ '0' if plan.is_favorite else '1' }}">
+      <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}">
+      <button type="submit" class="fav-btn {% if plan.is_favorite %}on{% endif %}"
+              title="{{ 'Remove from favorites' if plan.is_favorite else 'Add to favorites' }}">
+        {{ '★' if plan.is_favorite else '☆' }}
+      </button>
+    </form>
+    <form method="post" action="/plans/{{ plan.id }}/clone" style="display:inline">
+      <button type="submit" class="btn ghost">Clone</button>
+    </form>
+    <a class="btn btn-link" href="/plans/{{ plan.id }}/print">Print</a>
+    <a class="btn primary" href="/plans/{{ plan.id }}/shopping">Shopping list →</a>
+  </div>
 </div>
 
 {% if plan.notes %}<blockquote class="note mt-12">{{ plan.notes }}</blockquote>{% endif %}
@@ -20,7 +35,7 @@
 {% if plan['items'] %}
 <div class="plan-grid mt-16">
   <div class="plan-row head">
-    <span>day</span><span>meal</span><span>recipe</span><span>servings</span><span>time</span>
+    <span>day</span><span>meal</span><span>recipe</span><span>servings</span><span>time</span><span></span>
   </div>
   {% for item in plan['items'] %}
   <div class="plan-row">
@@ -29,10 +44,16 @@
     <span><a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a></span>
     <span>{{ item.servings_planned }}</span>
     <span>{{ item.cooking_time_min if item.cooking_time_min is not none else '' }}{% if item.cooking_time_min is not none %} min{% endif %}</span>
+    <span>
+      <form method="post" action="/plans/{{ plan.id }}/items/{{ item.id }}/delete" style="display:inline">
+        <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}">
+        <button type="submit" class="btn-danger" title="Remove from plan">✕</button>
+      </form>
+    </span>
   </div>
   {% endfor %}
 </div>
 {% else %}
-<div class="empty mt-16">This plan has no recipes yet.</div>
+<div class="empty mt-16">This plan has no recipes yet. Browse recipes and use "+ Add to this week".</div>
 {% endif %}
 {% endblock %}

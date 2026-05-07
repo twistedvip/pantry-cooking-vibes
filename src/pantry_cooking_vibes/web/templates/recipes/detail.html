@@ -22,6 +22,10 @@
             {{ '★ favorited' if recipe.is_favorite else '☆ favorite' }}
           </button>
         </form>
+        <form method="post" action="/recipes/{{ recipe.id }}/add-to-current-week" style="display:inline">
+          <input type="hidden" name="redirect_to" value="">
+          <button type="submit" class="fav-btn big" title="Add to this week's meal plan">+ Add to this week</button>
+        </form>
         {% if recipe.cooking_time_min is not none %}<span class="chip on">⏱ {{ recipe.cooking_time_min }} min</span>{% endif %}
         {% if recipe.servings %}<span class="chip on">🍽 serves {{ recipe.servings }}</span>{% endif %}
         {% if recipe.rating is not none %}<span class="chip on">★ {{ "%.1f"|format(recipe.rating) }}{% if recipe.rating_count %} ({{ recipe.rating_count }}){% endif %}</span>{% endif %}

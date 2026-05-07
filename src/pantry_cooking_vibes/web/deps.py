@@ -27,3 +27,7 @@ def get_templates() -> Jinja2Templates:
 def render(request: Request, template: str, context: dict) -> Response:
     """Render a template with ``request`` in context (required by Jinja2Templates)."""
     return _templates.TemplateResponse(request, template, context)
+
+
+def safe_redirect(target: str | None, fallback: str) -> str:
+    return target if target and target.startswith("/") else fallback

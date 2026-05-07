@@ -309,3 +309,44 @@ def test_seed_loader_idempotent(tmp_path):
         second = seed_canonical_ingredients(conn)
     assert first > 0
     assert second == 0
+
+
+# ---------- migration 005 ----------
+
+
+def test_migration_005_applied_idempotent(db_path):
+    """Migration 005 is already applied by init_db. Re-running returns []."""
+    with connect(db_path) as conn:
+        applied = run_migrations(conn)
+    assert applied == []
+
+    with connect(db_path) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "meal_plan_favorites" in tables
+
+    with connect(db_path) as conn:
+        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert "idx_meal_plans_week_draft" in indexes
+
+
+def test_meal_plans_partial_unique_index_blocks_duplicate_drafts(db_path):
+    """The partial unique index prevents two draft plans for the same week_of."""
+    import sqlite3
+
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-04', 'draft')")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with connect(db_path) as conn:
+            conn.execute("INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-04', 'draft')")
+
+
+def test_meal_plans_partial_unique_index_allows_confirmed_plus_draft(db_path):
+    """A confirmed + draft plan for the same week_of is allowed (index only constrains drafts)."""
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-11', 'confirmed')")
+        conn.execute("INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-11', 'draft')")
+        count = conn.execute(
+            "SELECT COUNT(*) FROM meal_plans WHERE week_of = '2026-05-11'"
+        ).fetchone()[0]
+    assert count == 2

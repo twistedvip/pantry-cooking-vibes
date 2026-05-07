@@ -12,6 +12,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from pantry_cooking_vibes.dates import current_sunday
 from pantry_cooking_vibes.db import DB_PATH, connect
 
 log = logging.getLogger(__name__)
@@ -420,23 +421,228 @@ def remove_meal_plan_item(item_id: int, *, db_path: Path | None = None) -> dict:
     return {"removed": removed, "id": int(item_id)}
 
 
+def remove_meal_plan_item_from_plan(
+    plan_id: int, item_id: int, *, db_path: Path | None = None
+) -> dict:
+    """Delete a meal_plan_items row only when its plan_id matches. Raises ValueError on mismatch."""
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        cur = conn.execute(
+            "DELETE FROM meal_plan_items WHERE id = ? AND plan_id = ?",
+            (int(item_id), int(plan_id)),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"item {item_id} not found in plan {plan_id}")
+    return {"removed": True, "plan_id": int(plan_id), "item_id": int(item_id)}
+
+
+def add_to_current_week_plan(recipe_id: int, *, db_path: Path | None = None) -> dict:
+    """Find-or-create draft plan for current_sunday() then insert item, atomic.
+
+    Opens its own connection. Do not share connections across threads.
+    """
+    sunday = current_sunday().isoformat()
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        exists = conn.execute("SELECT 1 FROM recipes WHERE id = ?", (int(recipe_id),)).fetchone()
+        if exists is None:
+            raise ValueError(f"recipe {recipe_id} not found")
+        conn.execute(
+            "INSERT INTO meal_plans (week_of, status) VALUES (?, 'draft') "
+            "ON CONFLICT(week_of) WHERE status='draft' DO NOTHING",
+            (sunday,),
+        )
+        plan = conn.execute(
+            "SELECT id FROM meal_plans WHERE week_of = ? AND status = 'draft' ORDER BY id LIMIT 1",
+            (sunday,),
+        ).fetchone()
+        item = conn.execute(
+            "INSERT INTO meal_plan_items "
+            "(plan_id, recipe_id, day, meal_slot, servings_planned) "
+            "VALUES (?, ?, NULL, NULL, 1) "
+            "RETURNING id, plan_id, recipe_id, day, meal_slot, servings_planned",
+            (plan["id"], int(recipe_id)),
+        ).fetchone()
+    return {"plan_id": plan["id"], "item": _row_to_dict(item)}
+
+
+def set_meal_plan_favorite(
+    plan_id: int,
+    favorite: bool,
+    *,
+    db_path: Path | None = None,
+) -> dict:
+    """Mark or unmark a meal plan as a favorite. Returns {plan_id, is_favorite}."""
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        exists = conn.execute("SELECT 1 FROM meal_plans WHERE id = ?", (int(plan_id),)).fetchone()
+        if exists is None:
+            raise ValueError(f"meal plan {plan_id} not found")
+        if favorite:
+            conn.execute(
+                "INSERT INTO meal_plan_favorites (plan_id) VALUES (?) "
+                "ON CONFLICT(plan_id) DO NOTHING",
+                (int(plan_id),),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM meal_plan_favorites WHERE plan_id = ?",
+                (int(plan_id),),
+            )
+    return {"plan_id": int(plan_id), "is_favorite": bool(favorite)}
+
+
+def clone_meal_plan(plan_id: int, *, db_path: Path | None = None) -> dict:
+    """Clone a meal plan into a new draft for a new week. Single transaction.
+
+    Uses a week_of one week after the source plan to avoid conflicting with the
+    partial unique index on (week_of) WHERE status='draft'.
+    """
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        source = conn.execute(
+            "SELECT id, week_of, notes FROM meal_plans WHERE id = ?", (int(plan_id),)
+        ).fetchone()
+        if source is None:
+            raise ValueError(f"meal plan {plan_id} not found")
+        sunday = current_sunday().isoformat()
+        existing_draft = conn.execute(
+            "SELECT id FROM meal_plans WHERE week_of = ? AND status = 'draft'",
+            (sunday,),
+        ).fetchone()
+        if existing_draft is not None:
+            from datetime import timedelta
+
+            next_sunday = (current_sunday() + timedelta(days=7)).isoformat()
+            sunday = next_sunday
+        new_notes = f"Cloned from #{plan_id}."
+        if source["notes"]:
+            new_notes += f" {source['notes']}"
+        new_plan = conn.execute(
+            "INSERT INTO meal_plans (week_of, status, notes) VALUES (?, 'draft', ?) "
+            "RETURNING id, week_of, status, notes, created_at",
+            (sunday, new_notes),
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id, day, meal_slot, servings_planned) "
+            "SELECT ?, recipe_id, day, meal_slot, servings_planned "
+            "FROM meal_plan_items WHERE plan_id = ?",
+            (new_plan["id"], int(plan_id)),
+        )
+        item_count = conn.execute(
+            "SELECT COUNT(*) FROM meal_plan_items WHERE plan_id = ?",
+            (new_plan["id"],),
+        ).fetchone()[0]
+    result = _row_to_dict(new_plan)
+    result["item_count"] = item_count
+    return result
+
+
+def compute_pantry_coverage(plan_id: int, *, db_path: Path | None = None) -> dict:
+    """Compute pantry coverage for a plan.
+
+    Returns {plan_id, covered, total, percent, missing}.
+    """
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        exists = conn.execute("SELECT 1 FROM meal_plans WHERE id = ?", (int(plan_id),)).fetchone()
+        if exists is None:
+            raise ValueError(f"meal plan {plan_id} not found")
+        plan_canonicals = conn.execute(
+            "SELECT DISTINCT ri.canonical_id "
+            "FROM meal_plan_items mpi "
+            "JOIN recipe_ingredients ri ON ri.recipe_id = mpi.recipe_id "
+            "WHERE mpi.plan_id = ? AND ri.canonical_id IS NOT NULL",
+            (int(plan_id),),
+        ).fetchall()
+        canonical_ids = {r["canonical_id"] for r in plan_canonicals}
+        if not canonical_ids:
+            return {"plan_id": plan_id, "covered": 0, "total": 0, "percent": 0, "missing": []}
+        pantry_ids = {
+            r["canonical_id"]
+            for r in conn.execute("SELECT DISTINCT canonical_id FROM pantry").fetchall()
+        }
+        covered_ids = canonical_ids & pantry_ids
+        missing_ids = canonical_ids - pantry_ids
+        missing = []
+        if missing_ids:
+            placeholders = ",".join("?" * len(missing_ids))
+            rows = conn.execute(
+                f"SELECT id, name FROM canonical_ingredients "  # noqa: S608
+                f"WHERE id IN ({placeholders}) ORDER BY name",
+                list(missing_ids),
+            ).fetchall()
+            missing = [{"canonical_id": r["id"], "name": r["name"]} for r in rows]
+    total = len(canonical_ids)
+    covered = len(covered_ids)
+    percent = int(round(100 * covered / total)) if total else 0
+    return {
+        "plan_id": plan_id,
+        "covered": covered,
+        "total": total,
+        "percent": percent,
+        "missing": missing,
+    }
+
+
+def _coverage_by_plan(*, db_path: Path | None = None) -> dict[int, dict]:
+    """Compute coverage stats for all plans in one query. Returns {plan_id: {covered, total, percent}}."""
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        rows = conn.execute(
+            """
+            WITH plan_canon AS (
+                SELECT DISTINCT mpi.plan_id, ri.canonical_id
+                FROM meal_plan_items mpi
+                JOIN recipe_ingredients ri ON ri.recipe_id = mpi.recipe_id
+                WHERE ri.canonical_id IS NOT NULL
+            )
+            SELECT plan_id,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN canonical_id IN (SELECT canonical_id FROM pantry)
+                       THEN 1 ELSE 0 END) AS covered
+            FROM plan_canon GROUP BY plan_id
+            """
+        ).fetchall()
+    result: dict[int, dict] = {}
+    for r in rows:
+        total = r["total"]
+        covered = r["covered"]
+        result[r["plan_id"]] = {
+            "covered": covered,
+            "total": total,
+            "percent": int(round(100 * covered / total)) if total else 0,
+        }
+    return result
+
+
 def list_meal_plans(*, db_path: Path | None = None) -> list[dict]:
-    """All meal plans, newest first by week_of, with item counts."""
+    """All meal plans ordered by favorite status then newest week_of, with item counts and coverage."""
     db = db_path or DB_PATH
     with connect(db) as conn:
         rows = conn.execute(
             "SELECT mp.id, mp.week_of, mp.status, mp.notes, mp.created_at, "
-            "       COUNT(mpi.id) AS item_count "
+            "       COUNT(mpi.id) AS item_count, "
+            "       (mpf.plan_id IS NOT NULL) AS is_favorite "
             "FROM meal_plans mp "
             "LEFT JOIN meal_plan_items mpi ON mpi.plan_id = mp.id "
+            "LEFT JOIN meal_plan_favorites mpf ON mpf.plan_id = mp.id "
             "GROUP BY mp.id "
-            "ORDER BY mp.week_of DESC, mp.id DESC"
+            "ORDER BY is_favorite DESC, mp.week_of DESC, mp.id DESC"
         ).fetchall()
-    return [_row_to_dict(r) for r in rows]
+    coverage_map = _coverage_by_plan(db_path=db)
+    default_coverage = {"covered": 0, "total": 0, "percent": 0}
+    results = []
+    for r in rows:
+        d = _row_to_dict(r)
+        d["is_favorite"] = bool(d["is_favorite"])
+        d["coverage"] = coverage_map.get(d["id"], default_coverage)
+        results.append(d)
+    return results
 
 
 def get_meal_plan(plan_id: int, *, db_path: Path | None = None) -> dict | None:
-    """Fetch a meal plan with all items and recipe names."""
+    """Fetch a meal plan with all items, recipe names, favorite status, and coverage."""
     db = db_path or DB_PATH
     with connect(db) as conn:
         row = conn.execute(
@@ -453,7 +659,47 @@ def get_meal_plan(plan_id: int, *, db_path: Path | None = None) -> dict | None:
             "WHERE mpi.plan_id = ? ORDER BY mpi.id",
             (plan_id,),
         ).fetchall()
+        fav = conn.execute(
+            "SELECT 1 FROM meal_plan_favorites WHERE plan_id = ?", (int(plan_id),)
+        ).fetchone()
+        plan_canonicals = conn.execute(
+            "SELECT DISTINCT ri.canonical_id "
+            "FROM meal_plan_items mpi "
+            "JOIN recipe_ingredients ri ON ri.recipe_id = mpi.recipe_id "
+            "WHERE mpi.plan_id = ? AND ri.canonical_id IS NOT NULL",
+            (int(plan_id),),
+        ).fetchall()
+        canonical_ids = {r["canonical_id"] for r in plan_canonicals}
+        if canonical_ids:
+            pantry_ids = {
+                r["canonical_id"]
+                for r in conn.execute("SELECT DISTINCT canonical_id FROM pantry").fetchall()
+            }
+            covered_ids = canonical_ids & pantry_ids
+            missing_ids = canonical_ids - pantry_ids
+            missing = []
+            if missing_ids:
+                placeholders = ",".join("?" * len(missing_ids))
+                rows = conn.execute(
+                    f"SELECT id, name FROM canonical_ingredients "  # noqa: S608
+                    f"WHERE id IN ({placeholders}) ORDER BY name",
+                    list(missing_ids),
+                ).fetchall()
+                missing = [{"canonical_id": r["id"], "name": r["name"]} for r in rows]
+            total = len(canonical_ids)
+            covered = len(covered_ids)
+            coverage = {
+                "plan_id": plan_id,
+                "covered": covered,
+                "total": total,
+                "percent": int(round(100 * covered / total)),
+                "missing": missing,
+            }
+        else:
+            coverage = {"plan_id": plan_id, "covered": 0, "total": 0, "percent": 0, "missing": []}
     plan["items"] = [_row_to_dict(i) for i in items]
+    plan["is_favorite"] = fav is not None
+    plan["coverage"] = coverage
     return plan
 
 

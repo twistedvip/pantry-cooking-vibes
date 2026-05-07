@@ -1,0 +1,48 @@
+@page {
+  margin: 1.5cm;
+  size: letter;
+}
+
+body.print-page {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 20pt;
+  margin: 0 0 16px;
+}
+
+h2 {
+  font-size: 16pt;
+  margin: 0 0 12px;
+}
+
+ul {
+  padding-left: 20px;
+  margin: 0;
+}
+
+li {
+  margin: 4px 0;
+}
+
+.category {
+  color: #666;
+  font-style: italic;
+  font-size: 10pt;
+}
+
+[data-role="recipe-page"] {
+  page-break-before: always;
+}
+
+@media print {
+  body.print-page {
+    padding: 0;
+  }
+}

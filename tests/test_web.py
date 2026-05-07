@@ -805,3 +805,175 @@ def test_mapping_approve_missing_redirects_with_error(client: TestClient):
     r = client.post("/mappings/99999/approve", follow_redirects=False)
     assert r.status_code == 303
     assert "error=" in r.headers["location"]
+
+
+# ---------- plan authoring ----------
+
+
+def test_post_plans_creates_plan_for_current_sunday(client: TestClient, seeded_db_path):
+    r = client.post("/plans", data={}, follow_redirects=False)
+    assert r.status_code == 303
+    location = r.headers["location"]
+    assert location.startswith("/plans/")
+    plan_id = int(location.split("/plans/")[1])
+
+    with connect(seeded_db_path) as conn:
+        plan = conn.execute(
+            "SELECT week_of, status FROM meal_plans WHERE id = ?", (plan_id,)
+        ).fetchone()
+    assert plan["status"] == "draft"
+    from pantry_cooking_vibes.dates import current_sunday
+
+    assert plan["week_of"] == current_sunday().isoformat()
+
+
+def test_post_plans_rejects_non_sunday(client: TestClient):
+    r = client.post("/plans", data={"week_of": "2026-05-06"}, follow_redirects=False)
+    assert r.status_code == 422
+
+
+def test_post_recipe_add_to_current_week_redirects_and_appends(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+
+    r = client.post(f"/recipes/{rid}/add-to-current-week", data={}, follow_redirects=False)
+    assert r.status_code == 303
+    location = r.headers["location"]
+    assert "/plans/" in location
+
+    plan_id = int(location.split("/plans/")[1])
+    with connect(seeded_db_path) as conn:
+        items = conn.execute(
+            "SELECT recipe_id FROM meal_plan_items WHERE plan_id = ?", (plan_id,)
+        ).fetchall()
+    assert any(i["recipe_id"] == rid for i in items)
+
+
+def test_post_recipe_add_to_current_week_missing_recipe(client: TestClient):
+    r = client.post("/recipes/99999/add-to-current-week", data={}, follow_redirects=False)
+    assert r.status_code == 404
+
+
+def test_post_plan_favorite_toggle(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-04', 'draft') RETURNING id"
+        ).fetchone()["id"]
+
+    r = client.post(f"/plans/{plan_id}/favorite", data={"favorite": "1"}, follow_redirects=False)
+    assert r.status_code == 303
+
+    with connect(seeded_db_path) as conn:
+        fav = conn.execute(
+            "SELECT 1 FROM meal_plan_favorites WHERE plan_id = ?", (plan_id,)
+        ).fetchone()
+    assert fav is not None
+
+
+def test_post_plan_clone_redirects_to_new_plan(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of, status, notes) "
+            "VALUES ('2026-04-13', 'draft', 'src') RETURNING id"
+        ).fetchone()["id"]
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, rid)
+        )
+
+    r = client.post(f"/plans/{plan_id}/clone", data={}, follow_redirects=False)
+    assert r.status_code == 303
+    new_id = int(r.headers["location"].split("/plans/")[1])
+    assert new_id != plan_id
+
+    with connect(seeded_db_path) as conn:
+        new_plan = conn.execute(
+            "SELECT notes, status FROM meal_plans WHERE id = ?", (new_id,)
+        ).fetchone()
+    assert new_plan["notes"].startswith(f"Cloned from #{plan_id}.")
+    assert new_plan["status"] == "draft"
+
+
+def test_post_plan_item_delete_match(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-05-04') RETURNING id"
+        ).fetchone()["id"]
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+        item_id = conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?) RETURNING id",
+            (plan_id, rid),
+        ).fetchone()["id"]
+
+    r = client.post(f"/plans/{plan_id}/items/{item_id}/delete", data={}, follow_redirects=False)
+    assert r.status_code == 303
+    assert f"/plans/{plan_id}" in r.headers["location"]
+
+    with connect(seeded_db_path) as conn:
+        gone = conn.execute("SELECT 1 FROM meal_plan_items WHERE id = ?", (item_id,)).fetchone()
+    assert gone is None
+
+
+def test_post_plan_item_delete_404_on_mismatch(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        p1 = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-04-06') RETURNING id"
+        ).fetchone()["id"]
+        p2 = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-04-13') RETURNING id"
+        ).fetchone()["id"]
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+        item_id = conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?) RETURNING id",
+            (p1, rid),
+        ).fetchone()["id"]
+
+    r = client.post(f"/plans/{p2}/items/{item_id}/delete", data={}, follow_redirects=False)
+    assert r.status_code == 404
+
+    with connect(seeded_db_path) as conn:
+        still_there = conn.execute(
+            "SELECT 1 FROM meal_plan_items WHERE id = ?", (item_id,)
+        ).fetchone()
+    assert still_there is not None
+
+
+def test_get_plans_print_dom_structure(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-05-04') RETURNING id"
+        ).fetchone()["id"]
+        for rid in conn.execute("SELECT id FROM recipes").fetchall():
+            conn.execute(
+                "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)",
+                (plan_id, rid["id"]),
+            )
+
+    r = client.get(f"/plans/{plan_id}/print")
+    assert r.status_code == 200
+    body = r.text
+    assert 'data-role="ingredients-page"' in body
+    assert body.count('data-role="recipe-page"') == 2
+    assert "/static/print.css" in body
+    assert "topbar" not in body
+    assert "mainnav" not in body
+
+
+def test_plan_list_renders_chips(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of, status) VALUES ('2026-05-04', 'draft') RETURNING id"
+        ).fetchone()["id"]
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, rid)
+        )
+
+    r = client.get("/plans")
+    assert r.status_code == 200
+    body = r.text
+    assert "coverage-chip" in body
+    assert "% pantry" in body
+    assert "fav-toggle" in body or "fav-btn" in body
+    assert "Clone" in body
+    assert "/print" in body

@@ -512,6 +512,10 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   overflow: hidden;
   transition: transform .08s ease;
 }
+.coverage-chip {
+  font-weight: 700;
+}
+
 .fav-toggle { margin: 0; }
 .fav-toggle.detail { display: inline; }
 .recipe-card .fav-toggle {

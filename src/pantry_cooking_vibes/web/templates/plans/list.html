@@ -3,7 +3,11 @@
 {% block title %}Meal Plans{% endblock %}
 {% block content %}
 <h1>Meal Plans</h1>
-<p class="screen-sub">Weeks you've planned. Create or edit plans via the CLI or by chatting with Claude through the MCP server.</p>
+<p class="screen-sub">Plan your week, track pantry coverage, and print shopping-ready cards.</p>
+
+<form method="post" action="/plans" class="mb-12">
+  <button type="submit" class="btn primary">+ New plan for this week</button>
+</form>
 
 {% if plans %}
 <ul class="plan-list">
@@ -15,20 +19,32 @@
     </header>
     <div class="row gap-8 wrap">
       <span class="chip">{{ p.item_count }} meal{{ '' if p.item_count == 1 else 's' }}</span>
+      <span class="coverage-chip chip acc">{{ p.coverage.percent }}% pantry</span>
       {% if p.created_at %}<span class="label">created {{ p.created_at }}</span>{% endif %}
     </div>
     {% if p.notes %}<div class="notes">{{ p.notes }}</div>{% endif %}
     <div class="actions">
       <a class="btn" href="/plans/{{ p.id }}">Open →</a>
       <a class="btn btn-link" href="/plans/{{ p.id }}/shopping">Shopping list</a>
+      <a class="btn btn-link" href="/plans/{{ p.id }}/print">Print</a>
+      <form class="fav-toggle" method="post" action="/plans/{{ p.id }}/favorite">
+        <input type="hidden" name="favorite" value="{{ '0' if p.is_favorite else '1' }}">
+        <input type="hidden" name="redirect_to" value="/plans">
+        <button type="submit" class="fav-btn {% if p.is_favorite %}on{% endif %}"
+                title="{{ 'Remove from favorites' if p.is_favorite else 'Add to favorites' }}">
+          {{ '★' if p.is_favorite else '☆' }}
+        </button>
+      </form>
+      <form method="post" action="/plans/{{ p.id }}/clone" style="display:inline">
+        <button type="submit" class="btn ghost">Clone</button>
+      </form>
     </div>
   </li>
   {% endfor %}
 </ul>
 {% else %}
 <div class="empty">
-  No meal plans yet. Create one via the MCP server (ask Claude to plan your week)
-  or use the CLI.
+  No meal plans yet. Click the button above to start one, or ask Claude via the MCP server.
 </div>
 {% endif %}
 {% endblock %}
