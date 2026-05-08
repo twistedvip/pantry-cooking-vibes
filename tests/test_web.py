@@ -53,6 +53,25 @@ def test_recipes_search_narrows(client: TestClient):
     assert "Stir Fry" not in r.text
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "One-Pan Chicken Parm on Veggies",
+        "name:foo",
+        "spicy*",
+        '"unterminated',
+        "(broken",
+    ],
+)
+def test_recipes_search_with_fts5_operator_chars_does_not_500(client: TestClient, query: str):
+    # Regression for the production crash where FTS5 parsed a hyphen inside
+    # the user's title query as a NOT operator and surfaced a 500
+    # ("no such column: Pan" from "One-Pan Chicken ..."). Route should always
+    # render a 200, even if the query yields no results.
+    r = client.get("/recipes", params={"q": query})
+    assert r.status_code == 200
+
+
 def test_recipes_filter_max_time(client: TestClient):
     r = client.get("/recipes", params={"max_time": 30})
     assert r.status_code == 200

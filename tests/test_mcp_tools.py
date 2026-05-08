@@ -18,6 +18,47 @@ def test_search_recipes_fts_match(seeded_db_path):
     assert any("Broccoli" in n for n in names)
 
 
+# Regression: bare FTS5 input that contains operator characters (-, :, *, ", ())
+# used to crash the route with sqlite3.OperationalError ("no such column: Pan"
+# from "One-Pan Chicken Parm on Veggies"). Each token is now phrase-quoted so
+# operators are neutralized.
+@pytest.mark.parametrize(
+    "query",
+    [
+        "One-Pan Chicken Parm on Veggies",
+        "Pan:Roast",
+        "chicken*",
+        'broccoli "stir fry"',
+        "(soup) - bisque",
+        "name:foo column:bar",
+        "broccoli-soup",
+        "  ",
+    ],
+)
+def test_search_recipes_fts_operator_chars_do_not_crash(seeded_db_path, query):
+    # Must not raise; result list may be empty.
+    rows = tools.search_recipes(query=query, db_path=seeded_db_path)
+    assert isinstance(rows, list)
+
+
+def test_search_recipes_hyphenated_token_still_matches(seeded_db_path):
+    # "broccoli-soup" should still find Broccoli Soup since FTS5 tokenizer
+    # splits on the hyphen inside a phrase-quoted token.
+    rows = tools.search_recipes(query="broccoli-soup", db_path=seeded_db_path)
+    names = [r["name"] for r in rows]
+    assert any("Broccoli Soup" in n for n in names)
+
+
+def test_fts5_escape_query_phrases_each_token():
+    from pantry_cooking_vibes.mcp_server.tools import _fts5_escape_query
+
+    assert _fts5_escape_query("One-Pan Chicken") == '"One-Pan" "Chicken"'
+    assert _fts5_escape_query("") == ""
+    assert _fts5_escape_query("   ") == ""
+    # Embedded double quotes get escaped by doubling per FTS5 spec.
+    assert _fts5_escape_query('say "hi"') == '"say" """hi"""'
+
+
 def test_search_recipes_empty_query_orders_by_rating(seeded_db_path):
     rows = tools.search_recipes(db_path=seeded_db_path)
     assert len(rows) >= 2
