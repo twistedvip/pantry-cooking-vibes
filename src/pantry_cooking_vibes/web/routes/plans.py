@@ -137,8 +137,17 @@ def plan_print(
         ingredients_deduped.values(),
         key=lambda x: (x.get("category") or "", x.get("name") or ""),
     )
+    recipes_by_item: dict[int, dict] = {}
+    for item in plan["items"]:
+        recipe = tools.get_recipe(item["recipe_id"], db_path=db_path)
+        if recipe is not None:
+            recipes_by_item[item["id"]] = recipe
     return render(
         request,
         "plans/print.html",
-        {"plan": plan, "ingredients": ingredients_sorted},
+        {
+            "plan": plan,
+            "ingredients": ingredients_sorted,
+            "recipes_by_item": recipes_by_item,
+        },
     )

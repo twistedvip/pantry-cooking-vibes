@@ -1,48 +1,159 @@
 @page {
-  margin: 1.5cm;
+  margin: 1.2cm;
   size: letter;
 }
 
 body.print-page {
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 12pt;
-  line-height: 1.5;
+  font-size: 10pt;
+  line-height: 1.35;
   color: #1a1a1a;
   margin: 0;
-  padding: 20px;
+  padding: 16px;
 }
 
-h1 {
-  font-size: 20pt;
-  margin: 0 0 16px;
-}
-
-h2 {
-  font-size: 16pt;
+.print-header {
+  border-bottom: 2px solid #1a1a1a;
   margin: 0 0 12px;
+  padding: 0 0 6px;
 }
 
-ul {
-  padding-left: 20px;
+.print-header h1 {
+  font-size: 18pt;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ---------- Shopping strip across the top ---------- */
+
+.shopping-strip {
+  border: 1px solid #b8b8b8;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  background: #fafafa;
+}
+
+.shopping-strip h2 {
+  font-size: 11pt;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #444;
+}
+
+.shopping-list {
+  columns: 4;
+  column-gap: 18px;
+  list-style: disc;
+  padding-left: 16px;
+  margin: 0;
+  font-size: 9pt;
+}
+
+.shopping-list li {
+  margin: 1px 0;
+  break-inside: avoid;
+}
+
+.shopping-list .category {
+  color: #777;
+  font-style: italic;
+  font-size: 8pt;
+}
+
+/* ---------- Recipe grid (2 cards per row) ---------- */
+
+.recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.recipe-card {
+  border: 1px solid #888;
+  padding: 10px 12px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  display: flex;
+  flex-direction: column;
+}
+
+.recipe-card-head {
+  border-bottom: 1px solid #c8c8c8;
+  margin: 0 0 8px;
+  padding: 0 0 4px;
+}
+
+.recipe-card-title {
+  font-size: 12pt;
+  font-weight: 600;
   margin: 0;
 }
 
-li {
-  margin: 4px 0;
+.recipe-meta {
+  font-size: 8.5pt;
+  color: #555;
+  margin: 2px 0 0;
 }
 
-.category {
-  color: #666;
+.recipe-card-body {
+  display: grid;
+  grid-template-columns: 38% 1fr;
+  gap: 12px;
+}
+
+.recipe-card-body h4 {
+  font-size: 9pt;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #444;
+  border-bottom: 1px dotted #bbb;
+  padding-bottom: 1px;
+}
+
+.recipe-card-ingredients ul {
+  list-style: disc;
+  padding-left: 14px;
+  margin: 0;
+  font-size: 9pt;
+}
+
+.recipe-card-ingredients li {
+  margin: 1px 0;
+}
+
+.recipe-card-method ol {
+  padding-left: 18px;
+  margin: 0;
+  font-size: 9pt;
+}
+
+.recipe-card-method ol li {
+  margin: 2px 0;
+}
+
+.recipe-card-method p {
+  margin: 0;
+  font-size: 9pt;
+  white-space: pre-wrap;
+}
+
+.muted {
+  color: #888;
   font-style: italic;
-  font-size: 10pt;
+  font-size: 9pt;
+  margin: 0;
 }
 
-[data-role="recipe-page"] {
-  page-break-before: always;
-}
+/* ---------- Print adjustments ---------- */
 
 @media print {
   body.print-page {
     padding: 0;
+  }
+
+  .recipe-card {
+    border-color: #555;
   }
 }
