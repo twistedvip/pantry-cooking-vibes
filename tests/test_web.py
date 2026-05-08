@@ -1006,3 +1006,90 @@ def test_plan_list_renders_chips(client: TestClient, seeded_db_path):
     assert "fav-toggle" in body or "fav-btn" in body
     assert "Clone" in body
     assert "/print" in body
+
+
+# ---------- security middleware / headers ----------
+
+
+def test_security_headers_set_on_responses(client: TestClient):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Content-Security-Policy" in r.headers
+    assert "default-src 'self'" in r.headers["Content-Security-Policy"]
+    assert r.headers["X-Content-Type-Options"] == "nosniff"
+    assert r.headers["X-Frame-Options"] == "DENY"
+    assert r.headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_post_blocked_when_origin_does_not_match_host(client: TestClient, seeded_db_path):
+    """A drive-by page on attacker.example must not be able to delete recipes
+    via a cross-origin form POST. Origin/Referer mismatch -> 403."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/delete",
+        headers={"origin": "http://attacker.example"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+
+
+def test_post_allowed_when_origin_matches_host(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Soup'").fetchone()["id"]
+    # TestClient defaults Host to testserver
+    r = client.post(
+        f"/recipes/{rid}/favorite",
+        data={"favorite": "1"},
+        headers={"origin": "http://testserver"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_post_allowed_when_no_origin_or_referer(client: TestClient, seeded_db_path):
+    """CLI / MCP clients don't send Origin or Referer; they must still work."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Soup'").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/favorite",
+        data={"favorite": "1"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+# ---------- safe_redirect ----------
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("/recipes/1", "/recipes/1"),
+        ("/", "/"),
+        ("//evil.example/x", "FALLBACK"),
+        ("/\\evil.example/x", "FALLBACK"),
+        ("https://evil.example/x", "FALLBACK"),
+        ("javascript:alert(1)", "FALLBACK"),
+        ("", "FALLBACK"),
+        (None, "FALLBACK"),
+    ],
+)
+def test_safe_redirect_rejects_cross_origin_targets(target, expected):
+    from pantry_cooking_vibes.web.deps import safe_redirect
+
+    assert safe_redirect(target, "FALLBACK") == expected
+
+
+def test_protocol_relative_redirect_target_falls_back(client: TestClient, seeded_db_path):
+    """Regression: redirect_to=//evil.example would have followed cross-origin."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Soup'").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/favorite",
+        data={"favorite": "1", "redirect_to": "//evil.example/owned"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    # Must NOT redirect to attacker; falls back to recipe page.
+    assert r.headers["location"] == f"/recipes/{rid}"

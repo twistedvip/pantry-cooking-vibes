@@ -7,14 +7,17 @@ captured pages).
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -22,7 +25,12 @@ from urllib3.util.retry import Retry
 
 from pantry_cooking_vibes.db import DB_PATH, connect
 from pantry_cooking_vibes.importers._nutrition import project_nutrition
-from pantry_cooking_vibes.importers._utils import _html_to_text, _to_float, _to_int
+from pantry_cooking_vibes.importers._utils import (
+    _html_to_text,
+    _to_float,
+    _to_int,
+    safe_image_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -82,12 +90,73 @@ def _build_session() -> requests.Session:
     return s
 
 
+_ALLOWED_FETCH_SCHEMES = ("http", "https")
+_MAX_REDIRECTS = 5
+
+
+class UnsafeURLError(ValueError):
+    """Raised when a fetch URL targets an internal or non-http(s) address."""
+
+
+def _assert_safe_fetch_url(url: str) -> None:
+    """Reject SSRF candidates before issuing an HTTP request.
+
+    Blocks non-http(s) schemes, missing hosts, and any host that resolves to
+    a loopback / private / link-local / multicast / reserved / unspecified
+    address. Each redirect hop must be re-validated by the caller because
+    DNS can change between fetches and a public host can ``301`` to
+    ``http://127.0.0.1``.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_FETCH_SCHEMES:
+        raise UnsafeURLError(f"refusing non-http(s) scheme: {url!r}")
+    host = parsed.hostname
+    if not host:
+        raise UnsafeURLError(f"missing host in url: {url!r}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise UnsafeURLError(f"could not resolve host {host!r}: {e}") from e
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            raise UnsafeURLError(f"unparseable resolved address {ip_str!r}") from None
+        if (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise UnsafeURLError(f"refusing internal address {ip} for host {host!r} (url={url!r})")
+
+
 def fetch_html(url: str, *, session: requests.Session | None = None) -> str:
-    """Fetch HTML for *url*. Raises ``requests.HTTPError`` on non-2xx."""
+    """Fetch HTML for *url*. Raises ``requests.HTTPError`` on non-2xx, or
+    :class:`UnsafeURLError` if any URL in the redirect chain points at an
+    internal address.
+
+    Redirects are followed manually so each hop is re-validated; relying on
+    the requests/urllib3 default would let a public 302 land on
+    ``http://169.254.169.254/latest/meta-data/`` unchecked.
+    """
     s = session or _build_session()
-    r = s.get(url, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    return r.text
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        _assert_safe_fetch_url(current)
+        r = s.get(current, timeout=REQUEST_TIMEOUT, allow_redirects=False)
+        if r.is_redirect or r.is_permanent_redirect:
+            location = r.headers.get("Location")
+            if not location:
+                break
+            current = urljoin(current, location)
+            continue
+        r.raise_for_status()
+        return r.text
+    raise requests.TooManyRedirects(f"more than {_MAX_REDIRECTS} redirects from {url!r}")
 
 
 # ---------- JSON-LD extraction ----------
@@ -274,7 +343,7 @@ def parse_recipe(entity: dict, url: str) -> dict:
         "servings": parse_yield(entity.get("recipeYield")),
         "instructions_md": _instructions(entity.get("recipeInstructions")),
         "nutrition_json": json.dumps(nutrition, ensure_ascii=False) if nutrition else None,
-        "image_url": _image_url(entity.get("image")),
+        "image_url": safe_image_url(_image_url(entity.get("image"))),
         "rating": rating,
         "rating_count": rating_count,
         "ingredients": [

@@ -3,8 +3,32 @@
 from __future__ import annotations
 
 from html import unescape
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
+
+_SAFE_IMAGE_SCHEMES = ("http", "https")
+
+
+def safe_image_url(value: str | None) -> str | None:
+    """Return *value* only if it's an http(s) URL with a host, else ``None``.
+
+    Drops ``javascript:``, ``data:``, ``file:``, ``vbscript:``, protocol-
+    relative ``//host/...``, and blank/whitespace values so an attacker-
+    controlled recipe source can't plant an XSS payload into a field that
+    later renders into ``<img src>``.
+    """
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    parsed = urlparse(s)
+    if parsed.scheme.lower() not in _SAFE_IMAGE_SCHEMES:
+        return None
+    if not parsed.netloc:
+        return None
+    return s
 
 
 def _html_to_text(html: str | None) -> str | None:
