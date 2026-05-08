@@ -25,6 +25,12 @@ from pathlib import Path
 
 import pytest
 
+# Skip the entire e2e directory when playwright isn't installed so the
+# default `pytest` run on a dev box without `[e2e]` extras stays green.
+pytest.importorskip("playwright")
+
+import pytest
+
 from pantry_cooking_vibes.db import connect, init_db
 
 
