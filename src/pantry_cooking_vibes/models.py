@@ -13,6 +13,8 @@ import re
 
 from pydantic import BaseModel, field_validator
 
+from pantry_cooking_vibes.importers._utils import safe_image_url
+
 # Free-form source names registered by importers (core or plugin).
 # Lowercase ASCII letter to start, then lowercase letters / digits / hyphens.
 SOURCE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -62,3 +64,11 @@ class RecipeRecord(BaseModel):
         if not v.strip():
             raise ValueError("must be a non-empty string")
         return v
+
+    @field_validator("image_url")
+    @classmethod
+    def _safe_image_scheme(cls, v: str | None) -> str | None:
+        # Drop javascript:, data:, file:, etc. so a malicious source can't
+        # plant an XSS payload into a recipe field that later renders into
+        # <img src>. None-safe; returns None for any unsafe value.
+        return safe_image_url(v)

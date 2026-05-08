@@ -11,6 +11,8 @@ from pantry_cooking_vibes.db import connect
 from pantry_cooking_vibes.importers.url_import import (
     RecipeMissingImageError,
     RecipeNotFoundError,
+    UnsafeURLError,
+    _assert_safe_fetch_url,
     _collect_tags,
     _image_url,
     _instructions,
@@ -456,3 +458,83 @@ def test_import_url_strips_html_in_instructions(db_path):
     assert "<p>" not in row["instructions_md"]
     assert "<b>" not in row["instructions_md"]
     assert "Mix well." in row["instructions_md"]
+
+
+# ---------- SSRF guard (_assert_safe_fetch_url) ----------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "javascript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "http:///no-host",
+    ],
+)
+def test_assert_safe_fetch_url_rejects_non_http_or_missing_host(url):
+    with pytest.raises(UnsafeURLError):
+        _assert_safe_fetch_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/",
+        "http://127.0.0.1:8000/admin",
+        "http://localhost/",
+        "http://10.0.0.1/",
+        "http://192.168.1.5/",
+        "http://172.16.0.1/",
+        "http://169.254.169.254/latest/meta-data/",  # AWS IMDS
+        "http://[::1]/",  # IPv6 loopback
+    ],
+)
+def test_assert_safe_fetch_url_rejects_internal_addresses(url):
+    with pytest.raises(UnsafeURLError):
+        _assert_safe_fetch_url(url)
+
+
+def test_assert_safe_fetch_url_rejects_unresolvable_host():
+    # An invalid TLD that DNS can't resolve must not silently pass.
+    with pytest.raises(UnsafeURLError):
+        _assert_safe_fetch_url("http://no-such-host.invalid/")
+
+
+# ---------- image_url scheme guard (XSS hardening) ----------
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "javascript:alert(1)",
+        "data:image/svg+xml,<svg onload=alert(1)>",
+        "vbscript:msgbox",
+        "file:///etc/passwd",
+        "//evil.example/x.jpg",  # protocol-relative
+        "  ",
+    ],
+)
+def test_parse_recipe_drops_unsafe_image_scheme(image):
+    entity = {
+        "@type": "Recipe",
+        "name": "X",
+        "image": image,
+        "recipeIngredient": [],
+        "recipeInstructions": "step",
+    }
+    parsed = parse_recipe(entity, "https://example.com/x")
+    assert parsed["image_url"] is None
+
+
+def test_parse_recipe_keeps_https_image():
+    entity = {
+        "@type": "Recipe",
+        "name": "X",
+        "image": "https://cdn.example.com/foo.jpg",
+        "recipeIngredient": [],
+    }
+    assert parse_recipe(entity, "https://example.com/x")["image_url"] == (
+        "https://cdn.example.com/foo.jpg"
+    )

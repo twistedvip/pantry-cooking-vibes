@@ -31,7 +31,17 @@ def render(request: Request, template: str, context: dict) -> Response:
 
 
 def safe_redirect(target: str | None, fallback: str) -> str:
-    return target if target and target.startswith("/") else fallback
+    """Return ``target`` only if it's a same-origin path, else ``fallback``.
+
+    A protocol-relative URL like ``//evil.example/x`` starts with ``/`` but
+    redirects cross-origin in every browser. ``/\\foo`` is the same trick on
+    a Windows-aware proxy. Reject both.
+    """
+    if not target or not target.startswith("/"):
+        return fallback
+    if target.startswith("//") or target.startswith("/\\"):
+        return fallback
+    return target
 
 
 def url_quote(s: str) -> str:
