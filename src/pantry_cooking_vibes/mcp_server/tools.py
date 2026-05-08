@@ -36,6 +36,23 @@ def _clamp_limit(limit: int) -> int:
 # ---------- Recipe search & detail ----------
 
 
+def _fts5_escape_query(query: str) -> str:
+    """Turn user input into a safe FTS5 MATCH expression.
+
+    FTS5 reserves ``-`` (NOT), ``:`` (column filter), ``*`` (prefix),
+    ``"`` (phrase), and ``()`` (grouping). A bare query like
+    ``"One-Pan Chicken"`` is parsed as ``One NOT Pan ...`` and surfaces
+    a confusing ``no such column: Pan`` OperationalError. Wrapping each
+    whitespace-separated token in double quotes makes FTS5 treat it as
+    a literal phrase and neutralizes every operator inside. Embedded
+    double quotes are escaped by doubling, per the FTS5 spec.
+    """
+    tokens = query.split()
+    if not tokens:
+        return ""
+    return " ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in tokens)
+
+
 def _resolve_ingredient_canonical_ids(conn: sqlite3.Connection, names: list[str]) -> list[int]:
     """Map ingredient names → canonical_ids (case-insensitive name match).
 
@@ -96,7 +113,7 @@ def search_recipes(
             "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id "
             "WHERE recipes_fts MATCH ?"
         )
-        params.append(query.strip())
+        params.append(_fts5_escape_query(query))
         order = "ORDER BY f.rank, r.rating DESC NULLS LAST"
     else:
         sql_base = (

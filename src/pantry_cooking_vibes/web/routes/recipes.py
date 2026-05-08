@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -9,6 +11,8 @@ from fastapi.responses import RedirectResponse
 
 from pantry_cooking_vibes.mcp_server import tools
 from pantry_cooking_vibes.web.deps import get_db_path, render, safe_redirect
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/recipes")
 
@@ -71,18 +75,25 @@ def list_recipes(
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     ingredient_list = [i.strip() for i in ingredients.split(",") if i.strip()]
-    results = tools.search_recipes(
-        query=q,
-        max_time_min=max_time_val,
-        tags=tag_list or None,
-        limit=limit_val,
-        favorites_only=favorites_only,
-        sources=selected_sources or None,
-        ingredients=ingredient_list or None,
-        ingredient_mode=mode,
-        pantry_only=pantry_only_val,
-        db_path=db_path,
-    )
+    # search_recipes sanitizes the FTS5 query, but DB-level errors at the
+    # boundary (corrupt index, locked file, bad migration) shouldn't 500 the
+    # whole page — log them, render an empty result so the UI stays usable.
+    try:
+        results = tools.search_recipes(
+            query=q,
+            max_time_min=max_time_val,
+            tags=tag_list or None,
+            limit=limit_val,
+            favorites_only=favorites_only,
+            sources=selected_sources or None,
+            ingredients=ingredient_list or None,
+            ingredient_mode=mode,
+            pantry_only=pantry_only_val,
+            db_path=db_path,
+        )
+    except sqlite3.OperationalError:
+        log.exception("search_recipes failed: q=%r tags=%r", q, tag_list)
+        results = []
     return render(
         request,
         "recipes/list.html",
