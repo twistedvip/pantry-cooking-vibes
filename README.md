@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/pantry-cooking-vibes-logo.svg" alt="Pantry Cooking Vibes logo" width="640">
+</p>
+
 # Pantry Cooking Vibes
 
 Local, single-user meal-planning system where Claude acts as the planning
