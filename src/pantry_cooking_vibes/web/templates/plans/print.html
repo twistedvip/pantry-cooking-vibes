@@ -1,19 +1,68 @@
 {% extends "print_base.html" %}
 {% block title %}Plan {{ plan.week_of }} — Print{% endblock %}
 {% block content %}
-<section data-role="ingredients-page">
-  <h1>Ingredients — Week of {{ plan.week_of }}</h1>
-  <ul>
+<header class="print-header">
+  <h1>Recipes for week of {{ plan.week_of }}</h1>
+</header>
+
+<section data-role="ingredients-page" class="shopping-strip">
+  <h2>Shopping list</h2>
+  <ul class="shopping-list">
     {% for ing in ingredients %}
     <li>{{ ing.name }}{% if ing.category %} <span class="category">({{ ing.category }})</span>{% endif %}</li>
     {% endfor %}
   </ul>
 </section>
 
-{% for item in plan['items'] %}
-<section data-role="recipe-page" style="page-break-before: always">
-  <h2>{{ item.recipe_name }}</h2>
-  <p>Servings: {{ item.servings_planned }}{% if item.cooking_time_min %} · {{ item.cooking_time_min }} min{% endif %}</p>
+<section class="recipe-grid">
+  {% for item in plan['items'] %}
+  {% set recipe = recipes_by_item.get(item.id) %}
+  <article data-role="recipe-page" class="recipe-card">
+    <header class="recipe-card-head">
+      <h3 class="recipe-card-title">{{ item.recipe_name }}</h3>
+      <p class="recipe-meta">
+        {% if recipe and recipe.cooking_time_min %}{{ recipe.cooking_time_min }} mins{% elif item.cooking_time_min %}{{ item.cooking_time_min }} mins{% endif %}
+        {% set yield_count = (recipe.servings if recipe and recipe.servings else item.servings_planned) %}
+        {% if yield_count %} · serves {{ yield_count }}{% endif %}
+        {% if item.day %} · {{ item.day|capitalize }}{% if item.meal_slot %} {{ item.meal_slot }}{% endif %}{% endif %}
+      </p>
+    </header>
+
+    {% if recipe %}
+    <div class="recipe-card-body">
+      <div class="recipe-card-ingredients">
+        <h4>Ingredients</h4>
+        {% if recipe.ingredients %}
+        <ul>
+          {% for ing in recipe.ingredients %}
+          <li>{{ ing.original_text or ing.canonical_name or '(unknown)' }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">No ingredients recorded.</p>
+        {% endif %}
+      </div>
+
+      <div class="recipe-card-method">
+        <h4>Method</h4>
+        {% if recipe.instructions_md %}
+          {% set steps = recipe.instructions_md.split('\n') | map('trim') | reject('equalto', '') | list %}
+          {% if steps | length > 1 %}
+          <ol>
+            {% for step in steps %}<li>{{ step }}</li>{% endfor %}
+          </ol>
+          {% else %}
+          <p>{{ recipe.instructions_md }}</p>
+          {% endif %}
+        {% else %}
+        <p class="muted">No instructions recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="muted">Recipe details unavailable.</p>
+    {% endif %}
+  </article>
+  {% endfor %}
 </section>
-{% endfor %}
 {% endblock %}

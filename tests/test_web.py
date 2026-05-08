@@ -988,6 +988,32 @@ def test_get_plans_print_dom_structure(client: TestClient, seeded_db_path):
     assert "mainnav" not in body
 
 
+def test_plans_print_includes_per_recipe_ingredients_and_instructions(
+    client: TestClient, seeded_db_path
+):
+    """Each recipe section must contain that recipe's own ingredients and
+    instructions, not just the merged shopping list."""
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-05-04') RETURNING id"
+        ).fetchone()["id"]
+        for rid in conn.execute("SELECT id FROM recipes").fetchall():
+            conn.execute(
+                "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)",
+                (plan_id, rid["id"]),
+            )
+
+    body = client.get(f"/plans/{plan_id}/print").text
+    assert "2 cups broccoli florets" in body
+    assert "1 head broccoli" in body
+    assert "4 cups vegetable stock" in body
+    assert "Stir fry broccoli" in body
+    assert "Simmer broccoli in stock" in body
+    # Servings reflect recipe yield (4 / 6), not the schema default of 1.
+    assert "serves 4" in body
+    assert "serves 6" in body
+
+
 def test_plan_list_renders_chips(client: TestClient, seeded_db_path):
     with connect(seeded_db_path) as conn:
         plan_id = conn.execute(
