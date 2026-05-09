@@ -13,6 +13,13 @@
 #
 # Override port:           PCV_PORT=9000 docker compose up -d
 # Override pinned commit:  PCV_GIT_REF=v0.2.0 docker compose up -d --build
+#
+# Database persistence:
+#   The named volume `meal_data` holds /app/data/store/app.db. It survives
+#   `docker compose down`, image rebuilds, and Portainer "Pull and redeploy".
+#   Only `docker compose down -v` or `docker volume rm <stack>_meal_data`
+#   wipes it. Back up the SQLite file with `meal-cli db-backup` or by
+#   copying /var/lib/docker/volumes/<stack>_meal_data/_data/app.db.
 
 services:
   meal-planner:
@@ -37,8 +44,7 @@ services:
       - "${PCV_PORT:-8000}:${PCV_PORT:-8000}"
 
     volumes:
-      # Named volume = persistent SQLite + WAL/SHM sidecar files. Survives
-      # `docker compose down`; only `docker volume rm meal_data` wipes it.
+      # Persistent SQLite + WAL/SHM sidecar files. See header for backup notes.
       - meal_data:/app/data/store
 
     # Healthcheck is also defined in the Dockerfile. Repeat here so compose /

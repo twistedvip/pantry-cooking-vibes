@@ -13,10 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from pantry_cooking_vibes.importers.normalize import (
-    approve_mapping as _approve_mapping,
-    reject_mapping as _reject_mapping,
-)
+# `importers.normalize` is imported lazily in approve/reject below to keep rapidfuzz off the web boot path.
 from pantry_cooking_vibes.mcp_server import tools
 from pantry_cooking_vibes.web.deps import get_db_path, render, url_quote as _q
 
@@ -110,6 +107,8 @@ def mapping_approve(
             url=f"/mappings/{queue_id}?error={_q('pick a canonical ingredient first')}",
             status_code=303,
         )
+    from pantry_cooking_vibes.importers.normalize import approve_mapping as _approve_mapping
+
     _approve_mapping(queue_id, int(target), db_path=db_path)
     return RedirectResponse(
         url=f"/mappings?approved={_q(str(queue_id))}",
@@ -128,6 +127,8 @@ def mapping_reject(
             url=f"/mappings?error={_q(f'queue id {queue_id} not found')}",
             status_code=303,
         )
+    from pantry_cooking_vibes.importers.normalize import reject_mapping as _reject_mapping
+
     _reject_mapping(queue_id, db_path=db_path)
     return RedirectResponse(
         url=f"/mappings?rejected={_q(str(queue_id))}",

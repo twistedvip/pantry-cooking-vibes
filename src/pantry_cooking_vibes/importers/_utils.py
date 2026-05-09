@@ -5,7 +5,7 @@ from __future__ import annotations
 from html import unescape
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+# bs4 is imported lazily inside `_html_to_text` to keep bs4+lxml out of the web boot path.
 
 _SAFE_IMAGE_SCHEMES = ("http", "https")
 
@@ -34,6 +34,8 @@ def safe_image_url(value: str | None) -> str | None:
 def _html_to_text(html: str | None) -> str | None:
     if not html:
         return None
+    from bs4 import BeautifulSoup
+
     try:
         soup = BeautifulSoup(html, "html.parser")
     except Exception:
