@@ -87,10 +87,10 @@ VOLUME ["/app/data/store"]
 # below picks up $PORT, so EXPOSE here is informational only.
 EXPOSE 8000
 
-# Probe / over the running app. urllib avoids needing curl in the image.
+# Probe /healthz (cheap plain-text route — no template render, no DB query).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import os,sys,urllib.request; \
-sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/', timeout=3).status==200 else 1)" \
+sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/healthz', timeout=3).status==200 else 1)" \
   || exit 1
 
 # entrypoint runs first-run init (db-init + demo ingest if DB missing),

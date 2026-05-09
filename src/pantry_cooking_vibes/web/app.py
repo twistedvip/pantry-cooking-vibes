@@ -37,27 +37,39 @@ _CSP = (
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
+def _hostname_only(value: str) -> str:
+    """Lowercase hostname stripped of scheme, userinfo, and port.
+
+    ``urlsplit`` needs a scheme to populate ``netloc``; prepend ``//`` for bare
+    ``host[:port]`` strings (e.g. raw ``Host`` header values).
+    """
+    if "://" not in value:
+        value = "//" + value
+    return (urlsplit(value).hostname or "").lower()
+
+
 def _is_same_origin(request: Request) -> bool:
-    """Allow the request only if Origin/Referer match the Host header.
+    """Allow the request only if Origin/Referer hostname matches Host hostname.
 
     Browsers permit cross-origin form POSTs (no preflight on
-    application/x-www-form-urlencoded), so a malicious page running locally
-    while the dev server is up could fire ``POST /recipes/N/delete``. Without
-    a session/CSRF token, the cheapest defense is rejecting POSTs whose
-    Origin (or Referer) doesn't match Host. Requests that omit both headers
-    (curl, the test client, MCP clients) are allowed through; the threat
-    model here is browser-driven CSRF, not authenticated tooling.
+    application/x-www-form-urlencoded), so a malicious page could fire
+    ``POST /recipes/N/delete``. Without session/CSRF tokens, the cheapest
+    defense is rejecting POSTs whose Origin (or Referer) hostname doesn't
+    match Host. Hostname-only (not netloc) so reverse proxies that strip
+    default ports — Pi-hole, NPM, Traefik default-host on :80/:443 — still
+    pass when the public hostname matches the backend Host. Requests that
+    omit both headers (curl, the test client, MCP clients) are allowed
+    through; the threat model is browser-driven CSRF, not auth'd tooling.
     """
-    host = request.headers.get("host", "")
-    if not host:
+    host_name = _hostname_only(request.headers.get("host", ""))
+    if not host_name:
         return False
     origin = request.headers.get("origin")
     if origin:
-        return urlsplit(origin).netloc == host
+        return _hostname_only(origin) == host_name
     referer = request.headers.get("referer")
     if referer:
-        return urlsplit(referer).netloc == host
-    # No browser-supplied origin info; let CLI/test-client/MCP through.
+        return _hostname_only(referer) == host_name
     return True
 
 
