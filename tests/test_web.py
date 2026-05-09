@@ -1132,3 +1132,106 @@ def test_protocol_relative_redirect_target_falls_back(client: TestClient, seeded
     assert r.status_code == 303
     # Must NOT redirect to attacker; falls back to recipe page.
     assert r.headers["location"] == f"/recipes/{rid}"
+
+
+# ---------- LAN-IP same-origin regression ----------
+
+
+@pytest.mark.parametrize(
+    "host,origin",
+    [
+        # Plain LAN deploy (Docker / Portainer): browser at LAN IP+port.
+        ("192.168.50.195:30058", "http://192.168.50.195:30058"),
+        # Different port, same shape.
+        ("192.168.1.10:8080", "http://192.168.1.10:8080"),
+        # Hostname with port.
+        ("homelab.lan:30055", "http://homelab.lan:30055"),
+    ],
+)
+def test_lan_ip_post_with_matching_origin_allowed(client: TestClient, seeded_db_path, host, origin):
+    """Same-origin POST from a LAN IP/host with a non-default port must pass."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"redirect_to": f"/recipes/{rid}"},
+        headers={
+            "host": host,
+            "origin": origin,
+            "referer": f"{origin}/recipes/{rid}",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, (
+        f"got {r.status_code} {r.text!r} for host={host!r} origin={origin!r}"
+    )
+
+
+def test_lan_ip_post_with_referer_only_allowed(client: TestClient, seeded_db_path):
+    """Some browsers strip Origin on same-origin POSTs. Referer fallback must
+    also tolerate LAN IP + port."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"redirect_to": f"/recipes/{rid}"},
+        headers={
+            "host": "192.168.50.195:30058",
+            "referer": f"http://192.168.50.195:30058/recipes/{rid}",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, f"got {r.status_code} {r.text!r}"
+
+
+@pytest.mark.parametrize(
+    "host,origin",
+    [
+        # Reverse proxy strips port from Origin (NPM, Traefik default-host, Pi-hole).
+        ("192.168.50.195:30058", "http://192.168.50.195"),
+        # Browser served at port 80 (proxy fronts container), submits POST.
+        # Host preserved with port by proxy, Origin omits :80 per RFC.
+        ("homelab.lan:30058", "http://homelab.lan"),
+        # HTTPS proxy fronting HTTP container; Origin uses default :443.
+        ("homelab.lan:30058", "https://homelab.lan"),
+    ],
+)
+def test_post_with_proxy_stripped_port_in_origin_allowed(
+    client: TestClient, seeded_db_path, host, origin
+):
+    """Reverse proxies (NPM, Pi-hole, Traefik) forward Host with the backend
+    port while browser Origin omits the public default port per RFC 6454.
+    Port mismatch alone must not block same-hostname POSTs."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"redirect_to": f"/recipes/{rid}"},
+        headers={"host": host, "origin": origin},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, (
+        f"got {r.status_code} {r.text!r} for host={host!r} origin={origin!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "null",  # sandboxed iframe / privacy extension
+        "http://attacker.example",  # different hostname
+        "http://attacker.example:30058",  # same port, attacker host
+    ],
+)
+def test_post_blocked_when_origin_hostname_differs(client: TestClient, seeded_db_path, origin):
+    """CSRF guard must still fire when the Origin hostname differs from Host —
+    that's the actual browser-CSRF threat the middleware exists for."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"redirect_to": f"/recipes/{rid}"},
+        headers={"host": "192.168.50.195:30058", "origin": origin},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403, f"got {r.status_code} for origin={origin!r}"
