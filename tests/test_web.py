@@ -18,6 +18,19 @@ def client(seeded_db_path) -> TestClient:
 # ---------- home ----------
 
 
+def test_healthz_returns_ok_without_template_or_db(tmp_path):
+    """`/healthz` must return 200 plain-text without rendering a template
+    or touching the DB — succeed even when the DB file is missing."""
+    from pantry_cooking_vibes.web.app import create_app
+
+    missing_db = tmp_path / "does-not-exist.db"
+    probe = TestClient(create_app(db_path=missing_db))
+
+    r = probe.get("/healthz")
+    assert r.status_code == 200
+    assert r.text == "ok"
+
+
 def test_home_shows_counts(client: TestClient):
     r = client.get("/")
     assert r.status_code == 200
