@@ -208,6 +208,23 @@ def ingest_cmd(
         help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
+    dedup: bool = typer.Option(
+        True,
+        "--dedup/--no-dedup",
+        help=(
+            "Detect and skip same-source duplicate recipes (e.g. HungryRoot "
+            "serving-size variants). Best variant by rating_count > rating > "
+            "instructions length wins. Use --no-dedup to import every record."
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help=(
+            "Run validation + dedup but write nothing. Stats and skipped-"
+            "duplicate log show what a real ingest would do."
+        ),
+    ),
 ) -> None:
     """Ingest a JSONL file conforming to docs/jsonl_contract.md."""
     from pantry_cooking_vibes.importers.jsonl_ingest import ingest_jsonl
@@ -243,6 +260,8 @@ def ingest_cmd(
             db_path=db,
             plugin=plugin,
             quiet=quiet,
+            dedup=dedup,
+            dry_run=dry_run,
         )
     except FileNotFoundError as e:
         typer.echo(f"JSONL not found: {e}", err=True)
@@ -251,12 +270,14 @@ def ingest_cmd(
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from None
 
-    typer.echo(f"ingest done (source={source}):")
-    typer.echo(f"  processed   : {stats['processed']}")
-    typer.echo(f"  recipes     : {stats['recipes']}")
-    typer.echo(f"  ingredients : {stats['ingredients']}")
-    typer.echo(f"  tags        : {stats['tags']}")
-    typer.echo(f"  skipped     : {stats['skipped']}")
+    label = "dry-run" if dry_run else "ingest done"
+    typer.echo(f"{label} (source={source}):")
+    typer.echo(f"  processed          : {stats['processed']}")
+    typer.echo(f"  recipes            : {stats['recipes']}")
+    typer.echo(f"  ingredients        : {stats['ingredients']}")
+    typer.echo(f"  tags               : {stats['tags']}")
+    typer.echo(f"  skipped (invalid)  : {stats['skipped']}")
+    typer.echo(f"  duplicates_skipped : {stats['duplicates_skipped']}")
 
 
 @app.command("list-sources")

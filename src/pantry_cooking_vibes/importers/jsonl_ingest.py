@@ -23,7 +23,7 @@ from typing import TypedDict
 
 from pydantic import ValidationError
 
-from pantry_cooking_vibes.db import DB_PATH, connect
+from pantry_cooking_vibes.db import DB_PATH, get_connection
 from pantry_cooking_vibes.models import (
     SOURCE_NAME_RE,
     RecipeIngredientRecord,
@@ -39,6 +39,7 @@ class IngestStats(TypedDict):
     ingredients: int
     tags: int
     skipped: int
+    duplicates_skipped: int
 
 
 def _iter_jsonl(path: Path) -> Iterator[dict]:
@@ -169,6 +170,38 @@ def _replace_ingredients(
     return inserted
 
 
+def _load_existing_records(conn: sqlite3.Connection, source: str) -> list[RecipeRecord]:
+    """Materialize already-imported same-source recipes as RecipeRecord stubs.
+
+    Only the fields the dedup matcher needs (name, instructions, rating,
+    rating_count) are populated; ``ingredients=[]`` and a synthetic
+    ``source_id`` keep Pydantic happy. These stubs let the dedup pass
+    treat re-imports correctly: a new JSONL row that's a duplicate of a
+    DB row is dropped instead of silently UPSERT-overwriting it.
+    """
+    rows = conn.execute(
+        """
+        SELECT source_id, name, instructions_md, rating, rating_count
+        FROM recipes
+        WHERE source = ?
+        """,
+        (source,),
+    ).fetchall()
+    out: list[RecipeRecord] = []
+    for row in rows:
+        out.append(
+            RecipeRecord(
+                source_id=row["source_id"] or f"__db__/{row['name']}",
+                name=row["name"],
+                instructions_md=row["instructions_md"],
+                rating=row["rating"],
+                rating_count=row["rating_count"],
+                ingredients=[],
+            )
+        )
+    return out
+
+
 def ingest_jsonl(
     jsonl_path: Path,
     source: str,
@@ -177,6 +210,8 @@ def ingest_jsonl(
     plugin: str | None = None,
     batch_size: int = 200,
     quiet: bool = False,
+    dedup: bool = True,
+    dry_run: bool = False,
 ) -> IngestStats:
     """Import recipes from a JSONL file produced by an external scraper.
 
@@ -184,6 +219,19 @@ def ingest_jsonl(
     replaced wholesale per recipe. If ``plugin`` is provided, the importer
     is loaded via entry-point and its ``post_process(records)`` runs on
     the raw dicts before Pydantic validation.
+
+    Dedup (default on): same-source near-duplicates are clustered via
+    :func:`pantry_cooking_vibes.importers.dedup.cluster_duplicates`, the
+    highest-quality variant wins, and losers are skipped (counted into
+    ``duplicates_skipped`` and logged). The cluster pool includes already-
+    imported same-source DB rows so re-running ingest can't reintroduce a
+    duplicate of an existing recipe. Pass ``dedup=False`` to import every
+    record (curate by hand later).
+
+    Dry-run mode (``dry_run=True``) runs the entire pipeline — validation,
+    dedup, stat accumulation — but commits no DB writes and uses a
+    rollback-only connection. Use to preview what dedup will skip before
+    a real ingest.
 
     **Transaction semantics**: this is a best-effort batched importer.
     ``conn.commit()`` is called every ``batch_size`` recipes so progress is
@@ -216,20 +264,60 @@ def ingest_jsonl(
         "ingredients": 0,
         "tags": 0,
         "skipped": 0,
+        "duplicates_skipped": 0,
     }
 
-    with connect(db) as conn:
+    # Validate up front so dedup can score on rating/rating_count without
+    # re-parsing. processed/skipped accounting matches the legacy path.
+    valid_records: list[RecipeRecord] = []
+    for raw in raw_records:
+        stats["processed"] += 1
+        try:
+            rec = RecipeRecord.model_validate(raw)
+        except ValidationError:
+            stats["skipped"] += 1
+            continue
+        if not rec.image_url or not rec.image_url.strip():
+            stats["skipped"] += 1
+            continue
+        valid_records.append(rec)
+
+    # Manage commit/rollback manually so dry_run can roll back at the
+    # end. The connect() helper auto-commits on clean exit, which would
+    # turn a dry-run into a real write.
+    conn = get_connection(db)
+    try:
         canonical_map = _load_canonical_map(conn, source)
-        for raw in raw_records:
-            stats["processed"] += 1
-            try:
-                rec = RecipeRecord.model_validate(raw)
-            except ValidationError:
-                stats["skipped"] += 1
-                continue
-            if not rec.image_url or not rec.image_url.strip():
-                stats["skipped"] += 1
-                continue
+
+        records_to_import = valid_records
+        if dedup:
+            from pantry_cooking_vibes.importers.dedup import cluster_duplicates
+
+            existing = _load_existing_records(conn, source)
+            existing_source_ids = {r.source_id for r in existing}
+            decisions = cluster_duplicates(existing + valid_records)
+            keep: list[RecipeRecord] = []
+            for d in decisions:
+                # Anything from the existing pool is a DB row — skip it
+                # whether it won or lost; we're only choosing which NEW
+                # records to write.
+                losers_from_input = [
+                    loser for loser in d.losers if loser.source_id not in existing_source_ids
+                ]
+                for loser in losers_from_input:
+                    stats["duplicates_skipped"] += 1
+                    if not quiet:
+                        print(
+                            f"  dedup: skipping {loser.source_id!r} "
+                            f"(duplicate of {d.keeper.source_id!r})"
+                        )
+                if d.keeper.source_id in existing_source_ids:
+                    # Existing DB row beat the JSONL contender(s); nothing new to write.
+                    continue
+                keep.append(d.keeper)
+            records_to_import = keep
+
+        for rec in records_to_import:
             recipe_id = _upsert_recipe(conn, source, rec)
             stats["tags"] += _replace_tags(conn, recipe_id, rec.tags)
             stats["ingredients"] += _replace_ingredients(
@@ -237,8 +325,19 @@ def ingest_jsonl(
             )
             stats["recipes"] += 1
             if stats["recipes"] % batch_size == 0:
-                conn.commit()
+                if not dry_run:
+                    conn.commit()
                 if not quiet:
                     print(f"  imported {stats['recipes']} recipes...")
+
+        if dry_run:
+            conn.rollback()
+        else:
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return stats
