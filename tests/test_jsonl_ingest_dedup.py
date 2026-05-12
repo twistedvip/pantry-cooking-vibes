@@ -22,7 +22,6 @@ from pantry_cooking_vibes.importers.dedup import (
 from pantry_cooking_vibes.importers.jsonl_ingest import ingest_jsonl
 from pantry_cooking_vibes.models import RecipeRecord
 
-
 # ---------- helpers ----------
 
 
@@ -163,23 +162,17 @@ def test_cluster_keeps_genuinely_different_dishes() -> None:
         _rec(
             source_id="hr-fajitas",
             name="Chicken Fajitas",
-            instructions_md=(
-                "Heat oil. Cook chicken with onion and pepper. Serve in tortillas."
-            ),
+            instructions_md=("Heat oil. Cook chicken with onion and pepper. Serve in tortillas."),
         ),
         _rec(
             source_id="hr-fajita-bowls",
             name="Chicken Fajita Bowls",
-            instructions_md=(
-                "Cook rice. Sauté chicken with peppers. Layer over rice with salsa."
-            ),
+            instructions_md=("Cook rice. Sauté chicken with peppers. Layer over rice with salsa."),
         ),
     ]
     decisions = cluster_duplicates(records)
     kept = {d.keeper.source_id for d in decisions}
-    assert kept == {"hr-fajitas", "hr-fajita-bowls"}, (
-        f"expected both to survive; got {decisions}"
-    )
+    assert kept == {"hr-fajitas", "hr-fajita-bowls"}, f"expected both to survive; got {decisions}"
 
 
 def test_cluster_requires_instructions_overlap_for_fuzzy_match() -> None:
@@ -206,16 +199,12 @@ def test_cluster_requires_instructions_overlap_for_fuzzy_match() -> None:
         ),
     ]
     decisions = cluster_duplicates(records)
-    assert len(decisions) == 2, (
-        "different cooking methods should not be deduped on name alone"
-    )
+    assert len(decisions) == 2, "different cooking methods should not be deduped on name alone"
 
 
 def test_cluster_best_variant_tiebreaks_on_quality_then_input_order() -> None:
     """rating_count first, then rating, then instructions length, then input order."""
-    same_instructions = (
-        "Whisk eggs, cook in a buttered skillet over low heat, stirring."
-    )
+    same_instructions = "Whisk eggs, cook in a buttered skillet over low heat, stirring."
     records = [
         _rec(
             source_id="first",
@@ -247,9 +236,7 @@ def test_cluster_best_variant_tiebreaks_on_quality_then_input_order() -> None:
 # ---------- end-to-end ingest ----------
 
 
-def test_ingest_dedup_default_picks_best_hungryroot_variant(
-    db_path: Path, tmp_path: Path
-) -> None:
+def test_ingest_dedup_default_picks_best_hungryroot_variant(db_path: Path, tmp_path: Path) -> None:
     """Realistic HungryRoot scrape: 3 serving-size variants of the same
     dish. Default ingest must keep only the highest rating_count one."""
     jsonl = tmp_path / "hr.jsonl"
@@ -304,17 +291,15 @@ def test_ingest_no_dedup_imports_every_variant(db_path: Path, tmp_path: Path) ->
             _hr_variant(source_id="hr-fajitas-6", name="Chicken Fajitas (serves 6)", servings=6),
         ],
     )
-    stats = ingest_jsonl(
-        jsonl, "hungryroot", db_path=db_path, quiet=True, dedup=False
-    )
+    stats = ingest_jsonl(jsonl, "hungryroot", db_path=db_path, quiet=True, dedup=False)
     assert stats["processed"] == 3
     assert stats["recipes"] == 3
     assert stats["duplicates_skipped"] == 0
 
     with connect(db_path) as conn:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM recipes WHERE source = 'hungryroot'"
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM recipes WHERE source = 'hungryroot'").fetchone()[
+            0
+        ]
     assert count == 3
 
 
@@ -358,15 +343,11 @@ def test_ingest_dedup_against_existing_db_rows(db_path: Path, tmp_path: Path) ->
     assert stats["duplicates_skipped"] == 1
 
     with connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT source_id FROM recipes WHERE source = 'hungryroot'"
-        ).fetchall()
+        rows = conn.execute("SELECT source_id FROM recipes WHERE source = 'hungryroot'").fetchall()
     assert {r["source_id"] for r in rows} == {"hr-fajitas-4"}
 
 
-def test_ingest_dedup_does_not_collapse_distinct_dishes(
-    db_path: Path, tmp_path: Path
-) -> None:
+def test_ingest_dedup_does_not_collapse_distinct_dishes(db_path: Path, tmp_path: Path) -> None:
     """Two different fajita-family dishes must both import — the
     threshold is calibrated against this kind of pair."""
     jsonl = tmp_path / "hr.jsonl"
@@ -433,7 +414,9 @@ def test_ingest_dedup_skips_records_without_image(db_path: Path, tmp_path: Path)
         jsonl,
         [
             rec_no_image,
-            _hr_variant(source_id="hr-fajitas-good", name="Chicken Fajitas, 4 servings", servings=4),
+            _hr_variant(
+                source_id="hr-fajitas-good", name="Chicken Fajitas, 4 servings", servings=4
+            ),
         ],
     )
     stats = ingest_jsonl(jsonl, "hungryroot", db_path=db_path, quiet=True)

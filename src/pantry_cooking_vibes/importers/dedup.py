@@ -106,9 +106,7 @@ class _Fingerprint:
 
 def _fingerprint(rec: RecipeRecord) -> _Fingerprint:
     instr = rec.instructions_md or ""
-    folded_instr = _WS_RE.sub(" ", _fold(instr).lower()).strip()[
-        :INSTRUCTIONS_HASH_PREFIX_CHARS
-    ]
+    folded_instr = _WS_RE.sub(" ", _fold(instr).lower()).strip()[:INSTRUCTIONS_HASH_PREFIX_CHARS]
     return _Fingerprint(
         norm_name=normalize_name(rec.name),
         instructions_hash=_instructions_signature(instr),
