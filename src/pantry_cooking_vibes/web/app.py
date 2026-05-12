@@ -49,21 +49,48 @@ def _hostname_only(value: str) -> str:
 
 
 def _is_same_origin(request: Request) -> bool:
-    """Allow the request only if Origin/Referer hostname matches Host hostname.
+    """Allow the request only if it's same-origin per the browser's own signals.
 
     Browsers permit cross-origin form POSTs (no preflight on
     application/x-www-form-urlencoded), so a malicious page could fire
     ``POST /recipes/N/delete``. Without session/CSRF tokens, the cheapest
-    defense is rejecting POSTs whose Origin (or Referer) hostname doesn't
-    match Host. Hostname-only (not netloc) so reverse proxies that strip
-    default ports — Pi-hole, NPM, Traefik default-host on :80/:443 — still
-    pass when the public hostname matches the backend Host. Requests that
-    omit both headers (curl, the test client, MCP clients) are allowed
-    through; the threat model is browser-driven CSRF, not auth'd tooling.
+    defense is rejecting POSTs the browser flags as cross-origin.
+
+    Order of trust:
+
+    1. ``Sec-Fetch-Site`` (Fetch Metadata) — Forbidden header set only by
+       the browser; JS cannot forge it. ``same-origin`` and ``none`` (user-
+       initiated, no referrer) are unambiguously safe. ``cross-site`` /
+       ``same-site`` are the actual CSRF threat. This is the authoritative
+       signal on every modern browser (Chrome 76+, FF 90+, Safari 16.4+)
+       and notably the ONLY one that stays correct when a strict
+       Referrer-Policy nulls the Origin header on legitimate same-origin
+       form POSTs.
+    2. ``Origin`` header hostname == ``Host`` hostname — fallback for
+       browsers without Fetch Metadata. Hostname-only (not netloc) so
+       reverse proxies that strip default ports — Pi-hole, NPM, Traefik
+       default-host on :80/:443 — still pass when the public hostname
+       matches the backend Host. ``Origin: null`` reaches this branch
+       only when Sec-Fetch-Site was absent, in which case we cannot tell
+       a sandboxed-iframe attacker from a stripped-origin same-origin
+       request, so we keep the conservative deny.
+    3. ``Referer`` hostname fallback — some browsers strip Origin on
+       same-origin POSTs.
+
+    Requests that omit all three (curl, the test client, MCP clients)
+    are allowed; the threat model is browser-driven CSRF, not auth'd
+    tooling.
     """
     host_name = _hostname_only(request.headers.get("host", ""))
     if not host_name:
         return False
+
+    sec_fetch_site = request.headers.get("sec-fetch-site", "").lower()
+    if sec_fetch_site in {"same-origin", "none"}:
+        return True
+    if sec_fetch_site in {"cross-site", "same-site"}:
+        return False
+
     origin = request.headers.get("origin")
     if origin:
         return _hostname_only(origin) == host_name
@@ -92,7 +119,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers.setdefault("Content-Security-Policy", _CSP)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("X-Frame-Options", "DENY")
         return response
 

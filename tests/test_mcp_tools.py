@@ -345,6 +345,37 @@ def test_create_meal_plan_rejects_impossible_dates(seeded_db_path, bad):
         tools.create_meal_plan(bad, db_path=seeded_db_path)
 
 
+def test_create_meal_plan_duplicate_week_returns_existing_draft(seeded_db_path):
+    """Reproduces the IntegrityError seen when creating a second draft for an
+    already-drafted week. The partial unique index ``idx_meal_plans_week_draft``
+    permits only one draft per ``week_of``; ``create_meal_plan`` must be
+    idempotent on that constraint instead of raising ``sqlite3.IntegrityError``.
+    """
+    first = tools.create_meal_plan("2026-05-03", notes="first", db_path=seeded_db_path)
+    second = tools.create_meal_plan("2026-05-03", notes="ignored", db_path=seeded_db_path)
+    assert second["id"] == first["id"]
+    assert second["status"] == "draft"
+    assert second["notes"] == "first"
+
+    with connect(seeded_db_path) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM meal_plans WHERE week_of = ? AND status = 'draft'",
+            ("2026-05-03",),
+        ).fetchone()[0]
+    assert count == 1
+
+
+def test_create_meal_plan_after_confirm_allows_new_draft(seeded_db_path):
+    """Partial index only forbids duplicate *drafts*; once the prior plan is
+    confirmed, a new draft for the same week should succeed."""
+    first = tools.create_meal_plan("2026-05-03", db_path=seeded_db_path)
+    with connect(seeded_db_path) as conn:
+        conn.execute("UPDATE meal_plans SET status = 'confirmed' WHERE id = ?", (first["id"],))
+    second = tools.create_meal_plan("2026-05-03", db_path=seeded_db_path)
+    assert second["id"] != first["id"]
+    assert second["status"] == "draft"
+
+
 def test_create_meal_plan_basic(seeded_db_path):
     plan = tools.create_meal_plan("2026-05-04", notes="test", db_path=seeded_db_path)
     assert plan["status"] == "draft"

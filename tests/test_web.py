@@ -869,6 +869,25 @@ def test_post_plans_creates_plan_for_current_sunday(client: TestClient, seeded_d
     assert plan["week_of"] == current_sunday().isoformat()
 
 
+def test_post_plans_repeat_does_not_500(client: TestClient, seeded_db_path):
+    """Clicking '+ New plan for this week' twice must not raise
+    ``sqlite3.IntegrityError: UNIQUE constraint failed: meal_plans.week_of``.
+    Second submission should redirect to the existing draft, not 500.
+    """
+    r1 = client.post("/plans", data={}, follow_redirects=False)
+    assert r1.status_code == 303
+    first_id = int(r1.headers["location"].split("/plans/")[1])
+
+    r2 = client.post("/plans", data={}, follow_redirects=False)
+    assert r2.status_code == 303
+    second_id = int(r2.headers["location"].split("/plans/")[1])
+    assert second_id == first_id
+
+    with connect(seeded_db_path) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM meal_plans WHERE status = 'draft'").fetchone()[0]
+    assert count == 1
+
+
 def test_post_plans_rejects_non_sunday(client: TestClient):
     r = client.post("/plans", data={"week_of": "2026-05-06"}, follow_redirects=False)
     assert r.status_code == 422
@@ -1057,7 +1076,7 @@ def test_security_headers_set_on_responses(client: TestClient):
     assert "default-src 'self'" in r.headers["Content-Security-Policy"]
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["X-Frame-Options"] == "DENY"
-    assert r.headers["Referrer-Policy"] == "no-referrer"
+    assert r.headers["Referrer-Policy"] == "same-origin"
 
 
 def test_post_blocked_when_origin_does_not_match_host(client: TestClient, seeded_db_path):
@@ -1218,7 +1237,6 @@ def test_post_with_proxy_stripped_port_in_origin_allowed(
 @pytest.mark.parametrize(
     "origin",
     [
-        "null",  # sandboxed iframe / privacy extension
         "http://attacker.example",  # different hostname
         "http://attacker.example:30058",  # same port, attacker host
     ],
@@ -1235,3 +1253,84 @@ def test_post_blocked_when_origin_hostname_differs(client: TestClient, seeded_db
         follow_redirects=False,
     )
     assert r.status_code == 403, f"got {r.status_code} for origin={origin!r}"
+
+
+def test_post_blocked_when_origin_null_and_cross_site(client: TestClient, seeded_db_path):
+    """``Origin: null`` from an attacker-controlled context (sandboxed iframe,
+    cross-origin redirect chain) MUST still be blocked. The browser tags those
+    with ``Sec-Fetch-Site: cross-site``, which is a Forbidden header — JS
+    cannot forge it — so it's the authoritative cross-origin signal."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"redirect_to": f"/recipes/{rid}"},
+        headers={
+            "host": "192.168.50.195:30058",
+            "origin": "null",
+            "sec-fetch-site": "cross-site",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+
+
+def test_post_allowed_for_real_chrome_same_origin_form_submit(client: TestClient, seeded_db_path):
+    """Regression: replays the exact headers Chrome sends for a same-origin
+    form POST when the response carries ``Referrer-Policy: no-referrer``.
+    Chrome strips Referer and sets ``Origin: null``, but tags the request
+    ``Sec-Fetch-Site: same-origin`` because the navigation IS same-origin.
+
+    These are the literal headers captured from a failing
+    ``POST http://127.0.0.1:8000/plans`` against Chrome 148 / macOS:
+
+        Host: 127.0.0.1:8000
+        Origin: null
+        Sec-Fetch-Site: same-origin
+        Sec-Fetch-Mode: navigate
+        Sec-Fetch-Dest: document
+        Sec-Fetch-User: ?1
+        (no Referer)
+
+    The CSRF guard MUST trust ``Sec-Fetch-Site`` (browser-only, unforgeable)
+    and let this through, otherwise the New Plan button 403s for real users.
+    """
+    r = client.post(
+        "/plans",
+        data={},
+        headers={
+            "host": "127.0.0.1:8000",
+            "origin": "null",
+            "sec-fetch-site": "same-origin",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+            "sec-fetch-user": "?1",
+            "user-agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/148.0.0.0 Safari/537.36"
+            ),
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, (
+        f"expected 303 for same-origin Chrome POST, got {r.status_code}: {r.text!r}"
+    )
+
+
+def test_referrer_policy_does_not_strip_origin_on_same_origin_posts():
+    """Root-cause guard: ``Referrer-Policy: no-referrer`` is what triggered
+    Chrome to send ``Origin: null`` on a legitimate same-origin POST. The
+    middleware should now use a policy (``same-origin`` or stricter on the
+    cross-origin axis) that preserves Origin within the same origin."""
+    from pantry_cooking_vibes.web.app import create_app
+
+    app = create_app()
+    test_client = TestClient(app)
+    r = test_client.get("/healthz")
+    assert r.status_code == 200
+    policy = r.headers.get("Referrer-Policy", "")
+    assert policy != "no-referrer", (
+        "no-referrer causes Chrome to null the Origin header on same-origin "
+        "form POSTs — use same-origin or strict-origin-when-cross-origin"
+    )

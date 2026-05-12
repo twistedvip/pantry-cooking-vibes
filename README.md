@@ -15,6 +15,9 @@ single-URL JSON-LD import. Site-specific scrapers live in their own
 repos and register optional post-processing plugins through Python
 entry-points.
 
+**NOTE**: Currently the MCP server is fully untested. Once proper web UI interface is completed,
+MCP server will be focused on next.
+
 ## Quickstart
 
 ```bash
