@@ -394,16 +394,29 @@ def create_meal_plan(
     *,
     db_path: Path | None = None,
 ) -> dict:
-    """Create an empty meal plan for the given week."""
+    """Create an empty draft meal plan for the given week.
+
+    Idempotent on the (week_of, status='draft') partial unique index: if a
+    draft already exists for that week, the existing row is returned and
+    ``notes`` is ignored. Confirmed plans for the same week do not block
+    creation of a new draft.
+    """
     _validate_week_of(week_of)
     db = db_path or DB_PATH
     with connect(db) as conn:
         cur = conn.execute(
             "INSERT INTO meal_plans (week_of, notes) VALUES (?, ?) "
+            "ON CONFLICT(week_of) WHERE status='draft' DO NOTHING "
             "RETURNING id, week_of, status, notes, created_at",
             (week_of, notes),
         )
         row = cur.fetchone()
+        if row is None:
+            row = conn.execute(
+                "SELECT id, week_of, status, notes, created_at FROM meal_plans "
+                "WHERE week_of = ? AND status = 'draft' ORDER BY id LIMIT 1",
+                (week_of,),
+            ).fetchone()
     return _row_to_dict(row)
 
 

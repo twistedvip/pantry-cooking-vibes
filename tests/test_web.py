@@ -869,6 +869,25 @@ def test_post_plans_creates_plan_for_current_sunday(client: TestClient, seeded_d
     assert plan["week_of"] == current_sunday().isoformat()
 
 
+def test_post_plans_repeat_does_not_500(client: TestClient, seeded_db_path):
+    """Clicking '+ New plan for this week' twice must not raise
+    ``sqlite3.IntegrityError: UNIQUE constraint failed: meal_plans.week_of``.
+    Second submission should redirect to the existing draft, not 500.
+    """
+    r1 = client.post("/plans", data={}, follow_redirects=False)
+    assert r1.status_code == 303
+    first_id = int(r1.headers["location"].split("/plans/")[1])
+
+    r2 = client.post("/plans", data={}, follow_redirects=False)
+    assert r2.status_code == 303
+    second_id = int(r2.headers["location"].split("/plans/")[1])
+    assert second_id == first_id
+
+    with connect(seeded_db_path) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM meal_plans WHERE status = 'draft'").fetchone()[0]
+    assert count == 1
+
+
 def test_post_plans_rejects_non_sunday(client: TestClient):
     r = client.post("/plans", data={"week_of": "2026-05-06"}, follow_redirects=False)
     assert r.status_code == 422
@@ -1256,9 +1275,7 @@ def test_post_blocked_when_origin_null_and_cross_site(client: TestClient, seeded
     assert r.status_code == 403
 
 
-def test_post_allowed_for_real_chrome_same_origin_form_submit(
-    client: TestClient, seeded_db_path
-):
+def test_post_allowed_for_real_chrome_same_origin_form_submit(client: TestClient, seeded_db_path):
     """Regression: replays the exact headers Chrome sends for a same-origin
     form POST when the response carries ``Referrer-Policy: no-referrer``.
     Chrome strips Referer and sets ``Origin: null``, but tags the request
