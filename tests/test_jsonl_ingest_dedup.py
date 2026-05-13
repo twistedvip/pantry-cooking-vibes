@@ -423,3 +423,51 @@ def test_ingest_dedup_skips_records_without_image(db_path: Path, tmp_path: Path)
     assert stats["skipped"] == 1
     assert stats["recipes"] == 1
     assert stats["duplicates_skipped"] == 0
+
+
+def test_cluster_blocks_on_norm_name_even_with_identical_instructions() -> None:
+    """Different normalized names must not cluster even if instructions match.
+
+    Locks the exact-name blocking optimization: cross-bucket fuzzy-name
+    matches are out of scope, so records that only collide on instructions
+    stay in separate clusters.
+    """
+    shared_instructions = "Heat oil; cook chicken; serve."
+    rec_a = RecipeRecord.model_validate(
+        _hr_variant(
+            source_id="a",
+            name="Chicken Fajitas",
+            servings=2,
+            instructions=shared_instructions,
+        )
+    )
+    rec_b = RecipeRecord.model_validate(
+        _hr_variant(
+            source_id="b",
+            name="Beef Stew",
+            servings=2,
+            instructions=shared_instructions,
+        )
+    )
+    decisions = cluster_duplicates([rec_a, rec_b])
+    assert len(decisions) == 2
+    assert {d.keeper.source_id for d in decisions} == {"a", "b"}
+    assert all(d.losers == [] for d in decisions)
+
+
+def test_cluster_progress_callback_fires() -> None:
+    """progress callback is invoked at progress_every and once at completion."""
+    recs = [
+        RecipeRecord.model_validate(_hr_variant(source_id=f"r{i}", name=f"Recipe {i}", servings=2))
+        for i in range(5)
+    ]
+    calls: list[tuple[int, int]] = []
+    cluster_duplicates(
+        recs,
+        progress=lambda done, total: calls.append((done, total)),
+        progress_every=2,
+    )
+    # Ticks at i=2, 4 (every 2 iterations) plus a final (5, 5).
+    assert (5, 5) in calls
+    assert (2, 5) in calls
+    assert (4, 5) in calls

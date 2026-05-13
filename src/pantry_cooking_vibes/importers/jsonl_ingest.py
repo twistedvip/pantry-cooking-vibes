@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TypedDict
@@ -212,6 +214,7 @@ def ingest_jsonl(
     quiet: bool = False,
     dedup: bool = True,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> IngestStats:
     """Import recipes from a JSONL file produced by an external scraper.
 
@@ -251,12 +254,23 @@ def ingest_jsonl(
         )
     db = db_path or DB_PATH
 
+    def _log(msg: str) -> None:
+        if verbose and not quiet:
+            print(msg, file=sys.stderr, flush=True)
+
+    _log(f"[ingest] loading JSONL: {jsonl_path}")
+    t0 = time.monotonic()
     raw_records = list(_iter_jsonl(jsonl_path))
+    _log(f"[ingest] loaded {len(raw_records)} raw lines in {time.monotonic() - t0:.1f}s")
+
     if plugin is not None:
+        _log(f"[ingest] running plugin post_process: {plugin}")
         from pantry_cooking_vibes.importers.registry import load_plugin
 
         importer = load_plugin(plugin)
+        t0 = time.monotonic()
         raw_records = list(importer.post_process(raw_records))
+        _log(f"[ingest] plugin produced {len(raw_records)} records in {time.monotonic() - t0:.1f}s")
 
     stats: IngestStats = {
         "processed": 0,
@@ -269,7 +283,10 @@ def ingest_jsonl(
 
     # Validate up front so dedup can score on rating/rating_count without
     # re-parsing. processed/skipped accounting matches the legacy path.
+    _log(f"[ingest] validating {len(raw_records)} records...")
+    t0 = time.monotonic()
     valid_records: list[RecipeRecord] = []
+    validate_every = 5000
     for raw in raw_records:
         stats["processed"] += 1
         try:
@@ -281,6 +298,15 @@ def ingest_jsonl(
             stats["skipped"] += 1
             continue
         valid_records.append(rec)
+        if verbose and not quiet and stats["processed"] % validate_every == 0:
+            _log(
+                f"  validated {stats['processed']}/{len(raw_records)} "
+                f"(valid={len(valid_records)}, skipped={stats['skipped']})"
+            )
+    _log(
+        f"[ingest] validation done in {time.monotonic() - t0:.1f}s "
+        f"(valid={len(valid_records)}, skipped={stats['skipped']})"
+    )
 
     # Manage commit/rollback manually so dry_run can roll back at the
     # end. The connect() helper auto-commits on clean exit, which would
@@ -295,7 +321,22 @@ def ingest_jsonl(
 
             existing = _load_existing_records(conn, source)
             existing_source_ids = {r.source_id for r in existing}
-            decisions = cluster_duplicates(existing + valid_records)
+            pool_size = len(existing) + len(valid_records)
+            _log(
+                f"[ingest] dedup: clustering {pool_size} records "
+                f"({len(existing)} from DB + {len(valid_records)} new). "
+                f"Use --no-dedup to skip."
+            )
+            t0 = time.monotonic()
+
+            def _dedup_progress(done: int, total: int) -> None:
+                _log(f"  dedup {done}/{total} ({done * 100 // max(total, 1)}%)")
+
+            decisions = cluster_duplicates(
+                existing + valid_records,
+                progress=_dedup_progress if (verbose and not quiet) else None,
+            )
+            _log(f"[ingest] dedup done in {time.monotonic() - t0:.1f}s: {len(decisions)} clusters")
             keep: list[RecipeRecord] = []
             for d in decisions:
                 # Anything from the existing pool is a DB row — skip it
@@ -317,6 +358,9 @@ def ingest_jsonl(
                 keep.append(d.keeper)
             records_to_import = keep
 
+        total_to_write = len(records_to_import)
+        _log(f"[ingest] writing {total_to_write} records (batch_size={batch_size})")
+        t_write = time.monotonic()
         for rec in records_to_import:
             recipe_id = _upsert_recipe(conn, source, rec)
             stats["tags"] += _replace_tags(conn, recipe_id, rec.tags)
@@ -328,7 +372,18 @@ def ingest_jsonl(
                 if not dry_run:
                     conn.commit()
                 if not quiet:
-                    print(f"  imported {stats['recipes']} recipes...")
+                    if verbose:
+                        elapsed = time.monotonic() - t_write
+                        rate = stats["recipes"] / elapsed if elapsed > 0 else 0
+                        eta = (total_to_write - stats["recipes"]) / rate if rate > 0 else 0
+                        print(
+                            f"  imported {stats['recipes']}/{total_to_write} "
+                            f"({rate:.0f}/s, eta {eta:.0f}s)",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        print(f"  imported {stats['recipes']} recipes...")
 
         if dry_run:
             conn.rollback()

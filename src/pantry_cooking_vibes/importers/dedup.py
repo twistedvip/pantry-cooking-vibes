@@ -34,6 +34,7 @@ import hashlib
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
@@ -161,22 +162,42 @@ class DedupDecision:
     losers: list[RecipeRecord]
 
 
-def cluster_duplicates(records: list[RecipeRecord]) -> list[DedupDecision]:
+def cluster_duplicates(
+    records: list[RecipeRecord],
+    *,
+    progress: Callable[[int, int], None] | None = None,
+    progress_every: int = 500,
+) -> list[DedupDecision]:
     """Group near-duplicate records and elect a best variant per cluster.
 
-    O(n²) on cluster size — fine for the scale this importer sees (a few
-    thousand records per source per ingest). Stable: clusters preserve
-    input order, and ties in ``_quality_key`` resolve to the first record
-    encountered.
+    Blocked on exact ``norm_name``: only records that share a normalized
+    name are considered as candidates for clustering, so the worst-case
+    O(n²) collapses to O(sum k_i²) over bucket sizes. ``_is_duplicate``
+    still gates each pair on the instructions signal, so within a bucket
+    a fuzzy-name match is unnecessary (same bucket = same normalized
+    name). Cross-bucket fuzzy-name matches are explicitly out of scope
+    for this pass; ``normalize_name`` already strips serving-size suffixes
+    so HR variants land in the same bucket.
+
+    Stable: clusters preserve input order, and ties in ``_quality_key``
+    resolve to the first record encountered.
+
+    ``progress``: optional callback invoked as ``progress(done, total)``
+    every ``progress_every`` outer iterations and once at completion.
+    Useful for long-running ingests where the clustering pass dominates
+    wall-clock time.
     """
+    total = len(records)
     fps = [_fingerprint(r) for r in records]
-    cluster_id: list[int] = [-1] * len(records)
+    cluster_id: list[int] = [-1] * total
     clusters: dict[int, list[int]] = {}
+    # Indices already seen, grouped by normalized name. Empty names are
+    # excluded because ``_is_duplicate`` short-circuits on them and the
+    # bucket would only accumulate dead weight.
+    bucket_members: dict[str, list[int]] = {}
     next_id = 0
     for i, fp_i in enumerate(fps):
-        for j in range(i):
-            if cluster_id[j] == -1:
-                continue
+        for j in bucket_members.get(fp_i.norm_name, ()):
             if _is_duplicate(fp_i, fps[j]):
                 cid = cluster_id[j]
                 cluster_id[i] = cid
@@ -186,6 +207,12 @@ def cluster_duplicates(records: list[RecipeRecord]) -> list[DedupDecision]:
             cluster_id[i] = next_id
             clusters[next_id] = [i]
             next_id += 1
+        if fp_i.norm_name:
+            bucket_members.setdefault(fp_i.norm_name, []).append(i)
+        if progress and progress_every and (i + 1) % progress_every == 0:
+            progress(i + 1, total)
+    if progress:
+        progress(total, total)
 
     decisions: list[DedupDecision] = []
     for indices in clusters.values():

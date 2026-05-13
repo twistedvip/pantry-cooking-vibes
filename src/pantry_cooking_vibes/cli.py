@@ -208,6 +208,15 @@ def ingest_cmd(
         help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output"),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help=(
+            "Emit phase-by-phase progress to stderr (load, validation, dedup, "
+            "write batches with rate/ETA)."
+        ),
+    ),
     dedup: bool = typer.Option(
         True,
         "--dedup/--no-dedup",
@@ -262,6 +271,7 @@ def ingest_cmd(
             quiet=quiet,
             dedup=dedup,
             dry_run=dry_run,
+            verbose=verbose,
         )
     except FileNotFoundError as e:
         typer.echo(f"JSONL not found: {e}", err=True)
