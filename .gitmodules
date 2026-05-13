@@ -1,0 +1,4 @@
+[submodule "pantry-cooking-vibes-hungryroot"]
+	path = scrapers/pantry-cooking-vibes-hungryroot
+	url = https://github.com/twistedvip/pantry-cooking-vibes-hungryroot
+	branch = main
