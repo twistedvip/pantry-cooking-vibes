@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/pantry-cooking-vibes-logo.svg" alt="Pantry Cooking Vibes logo" width="640">
+  <img src="docs/images/pantry-cooking-vibes-logo.svg" alt="Pantry Cooking Vibes logo" width="600">
 </p>
 
 # Pantry Cooking Vibes
