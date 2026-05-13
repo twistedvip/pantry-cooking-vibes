@@ -28,7 +28,7 @@ meal-cli = "pantry_cooking_vibes.cli:app"
 packages = ["src/pantry_cooking_vibes"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/", "db/", "data/seed/"]
+include = ["src/"]
 
 [project.optional-dependencies]
 dev = [

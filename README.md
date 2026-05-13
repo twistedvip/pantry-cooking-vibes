@@ -85,12 +85,12 @@ src/pantry_cooking_vibes/
   importers/            # url_import, jsonl_ingest, registry, normalize, _utils
   mcp_server/           # tools.py (pure functions) + server.py (FastMCP wrapper)
   web/                  # FastAPI app, routes, Jinja templates, static assets
-db/
-  schema.sql            # idempotent baseline schema
-  migrations/           # *.sql files applied after schema, tracked in schema_migrations
+  _assets/              # packaged sql/csv shipped in the wheel
+    schema.sql          # idempotent baseline schema
+    migrations/         # *.sql applied after schema, tracked in schema_migrations
+    canonical_seed.csv  # canonical_ingredients seed data
 data/
-  app.db                # default SQLite database
-  seed/canonical_seed.csv  # canonical_ingredients seed data
+  app.db                # default SQLite database (runtime, not packaged)
   seed/demo.jsonl       # one demo recipe shipped with core
 tests/
   test_*.py             # unit/integration tests (default pytest target)

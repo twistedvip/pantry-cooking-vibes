@@ -2,7 +2,7 @@ import csv
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 rows = [
     # Proteins - Meat
@@ -383,7 +383,9 @@ rows = [
     ("white wine", "beverage", "cup", "dry white wine|chardonnay|sauvignon blanc"),
 ]
 
-OUTPUT_PATH = os.path.join(PROJECT_ROOT, "data", "seed", "canonical_seed.csv")
+OUTPUT_PATH = os.path.join(
+    PROJECT_ROOT, "src", "pantry_cooking_vibes", "_assets", "canonical_seed.csv"
+)
 
 with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)

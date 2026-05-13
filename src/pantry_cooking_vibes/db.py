@@ -4,11 +4,17 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-# Resolve paths relative to project root (two levels above this file's src/pantry_cooking_vibes/)
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-DB_PATH = _PROJECT_ROOT / "data" / "app.db"
-SCHEMA_PATH = _PROJECT_ROOT / "db" / "schema.sql"
-SEED_PATH = _PROJECT_ROOT / "data" / "seed" / "canonical_seed.csv"
+# schema.sql, migrations/, and canonical_seed.csv live inside the package
+# as importable assets so they ship in the wheel and stay resolvable when
+# pantry-cooking-vibes is installed as a dependency (no source tree assumed).
+_PKG_DIR = Path(__file__).parent
+_ASSETS_DIR = _PKG_DIR / "_assets"
+# Runtime DB lives in the consumer's working tree, not the package. Resolved
+# from CWD so `meal-cli` and the web app land on the same data/app.db a user
+# expects to see at their project root.
+DB_PATH = Path.cwd() / "data" / "app.db"
+SCHEMA_PATH = _ASSETS_DIR / "schema.sql"
+SEED_PATH = _ASSETS_DIR / "canonical_seed.csv"
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -72,7 +78,7 @@ def seed_canonical_ingredients(conn: sqlite3.Connection, seed_path: Path = SEED_
     return inserted
 
 
-_MIGRATIONS_DIR = _PROJECT_ROOT / "db" / "migrations"
+_MIGRATIONS_DIR = _ASSETS_DIR / "migrations"
 _MIGRATION_VERSION_RE = re.compile(r"^(\d+)_")
 
 
