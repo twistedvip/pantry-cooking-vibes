@@ -25,18 +25,14 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 RUN pip install --no-cache-dir uv
 
-# /app is the runtime layout. db.py resolves _PROJECT_ROOT via
-# __file__.parent.parent.parent, so the project must live at the same path
-# in builder and runtime stages — otherwise canonical_seed.csv / schema.sql
-# fail to resolve. Editable install (default uv behavior) writes a .pth file
-# that points at /app/src, so the runtime stage just needs /opt/venv + /app
-# preserved at identical paths.
+# schema.sql, migrations/, and canonical_seed.csv are packaged under
+# src/pantry_cooking_vibes/_assets/, so only src/ needs to be copied — the
+# editable install's .pth file points at /app/src and the runtime stage
+# inherits the same path.
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-COPY db/ ./db/
-COPY data/seed/ ./data/seed/
 
 # --no-dev skips [dev]/[e2e] extras (~580MB savings vs full install).
 RUN uv sync --locked --no-dev
@@ -63,11 +59,9 @@ WORKDIR /app
 # /app/src — that path must exist in runtime too, hence the /app COPY below.
 COPY --from=builder /opt/venv /opt/venv
 
-# Whole project tree from builder. Carries src/ (so editable .pth resolves),
-# db/schema.sql + migrations (run on first-run init), data/seed/ (canonical
-# CSV + demo JSONL — read at runtime via _PROJECT_ROOT-rooted paths).
-# pyproject.toml + uv.lock + README come along; ~10KB total, not worth
-# excluding via a more surgical copy.
+# Whole project tree from builder. Carries src/ (editable .pth target +
+# packaged _assets/ holding schema.sql, migrations/, canonical_seed.csv);
+# pyproject.toml + uv.lock + README come along, ~10KB total.
 COPY --from=builder /app /app
 COPY docker/entrypoint.sh /app/entrypoint.sh
 
@@ -77,10 +71,9 @@ RUN chmod +x /app/entrypoint.sh \
 
 USER appuser
 
-# Persistent volume scoped to the SQLite store only. data/seed/ (canonical_seed
-# CSV + demo JSONL) stays in the image layer because the app reads it at
-# runtime via a hardcoded path in db.py — mounting over /app/data wholesale
-# would shadow it. /app/data/store/ is the sole writable surface.
+# Persistent volume scoped to the SQLite store only. /app/data/store/ is the
+# sole writable surface; the rest of /app/data is unused now that seed assets
+# live inside the installed package.
 VOLUME ["/app/data/store"]
 
 # Documented default port. Override with -e PORT=NNNN at runtime; the CMD

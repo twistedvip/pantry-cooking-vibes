@@ -1,8 +1,11 @@
 # Database
 
 SQLite file at `data/app.db`, WAL mode, foreign keys enforced. The full
-baseline lives in [`db/schema.sql`](../db/schema.sql); additive changes ship
-as migrations in [`db/migrations/`](../db/migrations).
+baseline lives in [`src/pantry_cooking_vibes/_assets/schema.sql`](../src/pantry_cooking_vibes/_assets/schema.sql);
+additive changes ship as migrations in
+[`src/pantry_cooking_vibes/_assets/migrations/`](../src/pantry_cooking_vibes/_assets/migrations).
+These files are packaged inside the wheel so consumers installing the project
+as a dependency get them without a source checkout.
 
 ## Tables (brief)
 
@@ -56,20 +59,24 @@ write paths use single-row INSERT/UPDATE.
 `pantry_cooking_vibes.db.init_db` is the single entry point. It does three
 things, idempotently:
 
-1. `apply_schema(conn)` — runs `db/schema.sql` (all `CREATE IF NOT EXISTS`).
-2. `run_migrations(conn)` — applies any `*.sql` under `db/migrations/` not
-   yet recorded in `schema_migrations`, in filename order.
-3. `seed_canonical_ingredients(conn)` — loads `data/seed/canonical_seed.csv`
-   into `canonical_ingredients` via `INSERT OR IGNORE`.
+1. `apply_schema(conn)` — runs the packaged `_assets/schema.sql` (all
+   `CREATE IF NOT EXISTS`).
+2. `run_migrations(conn)` — applies any `*.sql` under
+   `_assets/migrations/` not yet recorded in `schema_migrations`, in
+   filename order.
+3. `seed_canonical_ingredients(conn)` — loads the packaged
+   `_assets/canonical_seed.csv` into `canonical_ingredients` via
+   `INSERT OR IGNORE`.
 
 `serve-web` calls `run_migrations` during startup so a DB that predates a new
 migration self-heals before the first request.
 
 ## Adding a migration
 
-1. Create `db/migrations/NNN_short_name.sql` (three-digit prefix, sorted by
-   filename). Use `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` — migrations
-   should not require the previous state to be absent.
+1. Create `src/pantry_cooking_vibes/_assets/migrations/NNN_short_name.sql`
+   (three-digit prefix, sorted by filename). Use `CREATE TABLE IF NOT EXISTS`
+   / `ALTER TABLE` — migrations should not require the previous state to be
+   absent.
 2. Reference any new tables/columns from `tools.py` and templates.
 3. Run `meal-cli db-init` locally to apply.
 4. Add a regression test if it's a table referenced by a hot path (see

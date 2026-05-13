@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from pantry_cooking_vibes.db import (
@@ -35,12 +33,9 @@ def test_init_db_creates_parent_directory(tmp_path):
 
 
 def test_migration_004_purges_image_less_recipes(db_path):
-    migration = (
-        Path(__file__).resolve().parents[1]
-        / "db"
-        / "migrations"
-        / "004_drop_recipes_without_image.sql"
-    ).read_text(encoding="utf-8")
+    from pantry_cooking_vibes.db import _MIGRATIONS_DIR
+
+    migration = (_MIGRATIONS_DIR / "004_drop_recipes_without_image.sql").read_text(encoding="utf-8")
 
     with connect(db_path) as conn:
         ok = conn.execute(
@@ -214,8 +209,9 @@ def test_run_migrations_sets_user_version(tmp_path):
     with connect(db) as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     # user_version tracks the highest migration on disk.
-    migrations_dir = Path(__file__).resolve().parents[1] / "db" / "migrations"
-    expected = max(int(p.name.split("_", 1)[0]) for p in migrations_dir.glob("*.sql"))
+    from pantry_cooking_vibes.db import _MIGRATIONS_DIR
+
+    expected = max(int(p.name.split("_", 1)[0]) for p in _MIGRATIONS_DIR.glob("*.sql"))
     assert version == expected
 
 
