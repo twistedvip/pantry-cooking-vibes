@@ -25,36 +25,38 @@ SEED_PATH = _ASSETS_DIR / "canonical_seed.csv"
 _DB_ROOT_ENV = "PANTRY_COOKING_VIBES_DB_ROOT"
 
 
-def _allowed_db_roots() -> list[Path]:
-    """Return the directories under which a db_path may legally resolve.
+def _allowed_db_roots() -> list[str]:
+    """Return ``os.path.realpath``-normalized directories under which a
+    db_path may legally resolve.
 
     Always includes the default project ``./data`` root and the OS tempdir
     (so pytest's ``tmp_path`` fixture works). Operators may extend via the
     ``PANTRY_COOKING_VIBES_DB_ROOT`` env var.
     """
-    roots: list[Path] = [DB_PATH.parent.resolve()]
+    roots: list[str] = [os.path.realpath(str(DB_PATH.parent))]
     with suppress(OSError):
-        roots.append(Path(tempfile.gettempdir()).resolve())
+        roots.append(os.path.realpath(tempfile.gettempdir()))
     extra = os.environ.get(_DB_ROOT_ENV)
     if extra:
         for part in extra.split(os.pathsep):
             part = part.strip()
             if part:
                 with suppress(OSError):
-                    roots.append(Path(part).expanduser().resolve())
+                    roots.append(os.path.realpath(os.path.expanduser(part)))
     return roots
 
 
 def _resolve_safe_db_path(db_path: Path | str | None) -> Path:
     """Validate and canonicalize ``db_path`` before any filesystem access.
 
-    - Rejects ``None``, empty strings, and paths containing NUL bytes.
-    - Expands ``~``, then resolves to an absolute canonical path (no ``..``).
-    - Requires the resolved path to live under an allowed root
-      (see :func:`_allowed_db_roots`).
+    Sanitizer barrier for CodeQL ``py/path-injection``. Uses the canonical
+    ``os.path.realpath`` + ``os.path.commonpath`` equality idiom CodeQL
+    recognizes as a path-containment check.
 
-    This is the sanitizer for CodeQL ``py/path-injection``: every call site
-    that opens or creates the SQLite file routes through here.
+    - Rejects ``None``, empty strings, and paths containing NUL bytes.
+    - Expands ``~``, then realpath-canonicalizes (no ``..``, follows links).
+    - Requires the canonical path to live under an allowed root
+      (see :func:`_allowed_db_roots`); raises ``ValueError`` otherwise.
     """
     if db_path is None:
         raise ValueError("db_path must not be None")
@@ -64,26 +66,32 @@ def _resolve_safe_db_path(db_path: Path | str | None) -> Path:
     if "\x00" in raw:
         raise ValueError("db_path must not contain NUL byte")
 
-    resolved = Path(raw).expanduser().resolve()
+    candidate = os.path.realpath(os.path.expanduser(raw))
 
+    safe = False
     for root in _allowed_db_roots():
         try:
-            resolved.relative_to(root)
+            if os.path.commonpath([candidate, root]) == root:
+                safe = True
+                break
         except ValueError:
+            # commonpath raises if paths are on different drives (Windows)
             continue
-        return resolved
 
-    raise ValueError(
-        f"db_path {resolved} escapes the allowed roots; "
-        f"set {_DB_ROOT_ENV} to permit deployment outside ./data"
-    )
+    if not safe:
+        raise ValueError(
+            f"db_path {candidate} escapes the allowed roots; "
+            f"set {_DB_ROOT_ENV} to permit deployment outside ./data"
+        )
+
+    return Path(candidate)
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """Return a new connection with sensible defaults."""
     safe_path = _resolve_safe_db_path(db_path)
     safe_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(safe_path)
+    conn = sqlite3.connect(str(safe_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
