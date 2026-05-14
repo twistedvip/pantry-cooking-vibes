@@ -41,7 +41,7 @@ def mappings_page(
             db_path=db_path,
         )
     except ValueError as e:
-        return RedirectResponse(url=f"/mappings?error={_q(str(e))}", status_code=303)
+        return RedirectResponse(url="/mappings?error=" + _q(str(e)), status_code=303)
 
     return render(
         request,
@@ -98,20 +98,20 @@ def mapping_approve(
     item = tools.get_mapping_queue_item(queue_id, db_path=db_path)
     if item is None:
         return RedirectResponse(
-            url=f"/mappings?error={_q(f'queue id {queue_id} not found')}",
+            url="/mappings?error=" + _q("queue id " + str(queue_id) + " not found"),
             status_code=303,
         )
     target = canonical_id if canonical_id is not None else item["proposed_canonical_id"]
     if target is None:
         return RedirectResponse(
-            url=f"/mappings/{queue_id}?error={_q('pick a canonical ingredient first')}",
+            url="/mappings/" + str(queue_id) + "?error=" + _q("pick a canonical ingredient first"),
             status_code=303,
         )
     from pantry_cooking_vibes.importers.normalize import approve_mapping as _approve_mapping
 
     _approve_mapping(queue_id, int(target), db_path=db_path)
     return RedirectResponse(
-        url=f"/mappings?approved={_q(str(queue_id))}",
+        url="/mappings?approved=" + _q(str(queue_id)),
         status_code=303,
     )
 
@@ -124,13 +124,13 @@ def mapping_reject(
     item = tools.get_mapping_queue_item(queue_id, db_path=db_path)
     if item is None:
         return RedirectResponse(
-            url=f"/mappings?error={_q(f'queue id {queue_id} not found')}",
+            url="/mappings?error=" + _q("queue id " + str(queue_id) + " not found"),
             status_code=303,
         )
     from pantry_cooking_vibes.importers.normalize import reject_mapping as _reject_mapping
 
     _reject_mapping(queue_id, db_path=db_path)
     return RedirectResponse(
-        url=f"/mappings?rejected={_q(str(queue_id))}",
+        url="/mappings?rejected=" + _q(str(queue_id)),
         status_code=303,
     )

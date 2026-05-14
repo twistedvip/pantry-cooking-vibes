@@ -64,9 +64,9 @@ def pantry_add(
             db_path=db_path,
         )
     except ValueError as e:
-        return RedirectResponse(url=f"/pantry?error={_q(str(e))}", status_code=303)
+        return RedirectResponse(url="/pantry?error=" + _q(str(e)), status_code=303)
     return RedirectResponse(
-        url=f"/pantry?added=item%20{row['id']}",
+        url="/pantry?added=item%20" + str(row["id"]),
         status_code=303,
     )
 
@@ -87,9 +87,9 @@ def pantry_update(
             db_path=db_path,
         )
     except ValueError as e:
-        return RedirectResponse(url=f"/pantry?error={_q(str(e))}", status_code=303)
+        return RedirectResponse(url="/pantry?error=" + _q(str(e)), status_code=303)
     return RedirectResponse(
-        url=f"/pantry?updated=item%20{item_id}",
+        url="/pantry?updated=item%20" + str(item_id),
         status_code=303,
     )
 
@@ -101,8 +101,8 @@ def pantry_delete(
 ) -> RedirectResponse:
     result = tools.remove_pantry_item(item_id, db_path=db_path)
     if result["removed"]:
-        return RedirectResponse(url=f"/pantry?removed=item%20{item_id}", status_code=303)
+        return RedirectResponse(url="/pantry?removed=item%20" + str(item_id), status_code=303)
     return RedirectResponse(
-        url=f"/pantry?error=item%20{item_id}%20not%20found",
+        url="/pantry?error=item%20not%20found%3A%20" + str(item_id),
         status_code=303,
     )

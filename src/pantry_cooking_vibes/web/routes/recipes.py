@@ -157,7 +157,7 @@ def toggle_favorite(
         tools.set_recipe_favorite(recipe_id, want_fav, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found") from e
-    dest = safe_redirect(redirect_to, f"/recipes/{recipe_id}")
+    dest = safe_redirect(redirect_to, "/recipes/" + str(recipe_id))
     return RedirectResponse(url=dest, status_code=303)
 
 
@@ -172,5 +172,5 @@ def add_to_current_week(
         result = tools.add_to_current_week_plan(recipe_id, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    dest = safe_redirect(redirect_to, f"/plans/{result['plan_id']}")
+    dest = safe_redirect(redirect_to, "/plans/" + str(result["plan_id"]))
     return RedirectResponse(url=dest, status_code=303)
