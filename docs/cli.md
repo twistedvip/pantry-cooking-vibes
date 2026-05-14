@@ -55,6 +55,12 @@ meal-cli ingest data/seed/demo.jsonl --source manual
 #   ingredients : 8
 #   tags        : 3
 #   skipped     : 0
+# normalize done:
+#   distinct texts : 8
+#   auto-approved  : 6
+#   proposed       : 1
+#   no_match       : 1
+#   rows updated   : 6
 ```
 
 Flags:
@@ -67,6 +73,11 @@ Flags:
   hook runs before validation. See
   [`docs/jsonl_contract.md`](jsonl_contract.md#plugin-escape-hatch).
 - `--quiet` — suppress per-record progress output.
+- `--normalize` / `--no-normalize` — after a successful ingest, run the
+  same fuzzy-match backfill as [`normalize-recipes`](#meal-cli-normalize-recipes)
+  over the new recipe ingredients, and append its stats to the output.
+  On by default. Skipped on `--dry-run` and when no recipes were
+  written (e.g. every line invalid); the output says so explicitly.
 
 Failure modes:
 - JSONL file missing → exit 1 with `JSONL not found: <path>`.
