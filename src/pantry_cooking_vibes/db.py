@@ -25,38 +25,48 @@ SEED_PATH = _ASSETS_DIR / "canonical_seed.csv"
 _DB_ROOT_ENV = "PANTRY_COOKING_VIBES_DB_ROOT"
 
 
-def _allowed_db_roots() -> list[str]:
-    """Return ``os.path.realpath``-normalized directories under which a
-    db_path may legally resolve.
+def _root_prefix(p: str) -> str:
+    """Suffix a realpath'd directory with ``os.sep`` so ``startswith`` won't
+    accept ``/data2`` for ``/data``. Idempotent."""
+    return p if p.endswith(os.sep) else p + os.sep
 
-    Always includes the default project ``./data`` root and the OS tempdir
-    (so pytest's ``tmp_path`` fixture works). Operators may extend via the
-    ``PANTRY_COOKING_VIBES_DB_ROOT`` env var.
-    """
-    roots: list[str] = [os.path.realpath(str(DB_PATH.parent))]
-    with suppress(OSError):
-        roots.append(os.path.realpath(tempfile.gettempdir()))
+
+# Resolved once at import as string constants — CodeQL's sanitizer engine
+# recognizes ``startswith(<constant>)`` on a realpath'd value as a
+# SafeAccessCheck barrier that clears the path-injection taint state.
+_DATA_ROOT_PREFIX: str = _root_prefix(os.path.realpath(str(DB_PATH.parent)))
+try:
+    _TMP_ROOT_PREFIX: str = _root_prefix(os.path.realpath(tempfile.gettempdir()))
+except OSError:
+    _TMP_ROOT_PREFIX = _DATA_ROOT_PREFIX  # degenerate: fall back to data root
+
+
+def _env_root_prefixes() -> tuple[str, ...]:
+    """Operator-supplied extra roots via ``PANTRY_COOKING_VIBES_DB_ROOT``."""
     extra = os.environ.get(_DB_ROOT_ENV)
-    if extra:
-        for part in extra.split(os.pathsep):
-            part = part.strip()
-            if part:
-                with suppress(OSError):
-                    roots.append(os.path.realpath(os.path.expanduser(part)))
-    return roots
+    if not extra:
+        return ()
+    out: list[str] = []
+    for part in extra.split(os.pathsep):
+        part = part.strip()
+        if part:
+            with suppress(OSError):
+                out.append(_root_prefix(os.path.realpath(os.path.expanduser(part))))
+    return tuple(out)
 
 
-def _resolve_safe_db_path(db_path: Path | str | None) -> Path:
+_ENV_ROOT_PREFIXES: tuple[str, ...] = _env_root_prefixes()
+
+
+def _resolve_safe_db_path(db_path: Path | str | None) -> str:
     """Validate and canonicalize ``db_path`` before any filesystem access.
 
-    Sanitizer barrier for CodeQL ``py/path-injection``. Uses the canonical
-    ``os.path.realpath`` + ``os.path.commonpath`` equality idiom CodeQL
-    recognizes as a path-containment check.
+    CodeQL ``py/path-injection`` sanitizer barrier:
+    - ``os.path.realpath`` (PathNormalization → state ``NormalizedUnchecked``)
+    - ``startswith`` against module-level realpath'd constant prefix
+      (SafeAccessCheck → state cleared on true branch)
 
-    - Rejects ``None``, empty strings, and paths containing NUL bytes.
-    - Expands ``~``, then realpath-canonicalizes (no ``..``, follows links).
-    - Requires the canonical path to live under an allowed root
-      (see :func:`_allowed_db_roots`); raises ``ValueError`` otherwise.
+    Returns the canonical path string. Raises ``ValueError`` otherwise.
     """
     if db_path is None:
         raise ValueError("db_path must not be None")
@@ -68,30 +78,47 @@ def _resolve_safe_db_path(db_path: Path | str | None) -> Path:
 
     candidate = os.path.realpath(os.path.expanduser(raw))
 
-    safe = False
-    for root in _allowed_db_roots():
-        try:
-            if os.path.commonpath([candidate, root]) == root:
-                safe = True
-                break
-        except ValueError:
-            # commonpath raises if paths are on different drives (Windows)
-            continue
+    if candidate.startswith(_DATA_ROOT_PREFIX) or candidate.startswith(_TMP_ROOT_PREFIX):
+        return candidate
+    for env_prefix in _ENV_ROOT_PREFIXES:
+        if candidate.startswith(env_prefix):
+            return candidate
 
-    if not safe:
-        raise ValueError(
-            f"db_path {candidate} escapes the allowed roots; "
-            f"set {_DB_ROOT_ENV} to permit deployment outside ./data"
-        )
-
-    return Path(candidate)
+    raise ValueError(
+        f"db_path escapes the allowed roots; set {_DB_ROOT_ENV} to permit deployment outside ./data"
+    )
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """Return a new connection with sensible defaults."""
-    safe_path = _resolve_safe_db_path(db_path)
-    safe_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(safe_path))
+    # Inline CodeQL py/path-injection sanitizer barrier. Pattern: realpath
+    # (PathNormalization) + startswith against a module-level constant
+    # prefix (SafeAccessCheck on true branch). All filesystem access lives
+    # inside the true branch so the cleared-taint state applies.
+    raw = os.fspath(db_path)
+    if not raw or "\x00" in raw:
+        raise ValueError("invalid db_path")
+    candidate = os.path.realpath(os.path.expanduser(raw))
+
+    # Each branch holds its own `startswith` so CodeQL recognizes each as a
+    # distinct SafeAccessCheck barrier (combining via `or` works too but
+    # keeping them split makes the dataflow intent explicit).
+    safe_path: str | None = None
+    if candidate.startswith(_DATA_ROOT_PREFIX):  # noqa: SIM114
+        safe_path = candidate
+    elif candidate.startswith(_TMP_ROOT_PREFIX):
+        safe_path = candidate
+    else:
+        for env_prefix in _ENV_ROOT_PREFIXES:
+            if candidate.startswith(env_prefix):
+                safe_path = candidate
+                break
+
+    if safe_path is None:
+        raise ValueError("db_path outside allowed roots")
+
+    Path(safe_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(safe_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -217,7 +244,8 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path = _MIGRATIONS_
 
 def init_db(db_path: Path = DB_PATH) -> int:
     """Create data dir, apply schema, run migrations, seed canonical ingredients. Returns seed row count."""
-    safe_path = _resolve_safe_db_path(db_path)
+    safe_str = _resolve_safe_db_path(db_path)
+    safe_path = Path(safe_str)
     safe_path.parent.mkdir(parents=True, exist_ok=True)
     with connect(safe_path) as conn:
         apply_schema(conn)
