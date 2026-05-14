@@ -1,7 +1,9 @@
 import csv
+import os
 import re
 import sqlite3
-from contextlib import contextmanager
+import tempfile
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 # schema.sql, migrations/, and canonical_seed.csv live inside the package
@@ -16,11 +18,72 @@ DB_PATH = Path.cwd() / "data" / "app.db"
 SCHEMA_PATH = _ASSETS_DIR / "schema.sql"
 SEED_PATH = _ASSETS_DIR / "canonical_seed.csv"
 
+# Env var: os.pathsep-separated extra roots permitted for the runtime DB.
+# Used by operators who deploy the DB outside the project tree (e.g.
+# /var/lib/meal-planner). Empty by default — only the project ./data root
+# and the OS tempdir (for tests) are allowed.
+_DB_ROOT_ENV = "PANTRY_COOKING_VIBES_DB_ROOT"
+
+
+def _allowed_db_roots() -> list[Path]:
+    """Return the directories under which a db_path may legally resolve.
+
+    Always includes the default project ``./data`` root and the OS tempdir
+    (so pytest's ``tmp_path`` fixture works). Operators may extend via the
+    ``PANTRY_COOKING_VIBES_DB_ROOT`` env var.
+    """
+    roots: list[Path] = [DB_PATH.parent.resolve()]
+    with suppress(OSError):
+        roots.append(Path(tempfile.gettempdir()).resolve())
+    extra = os.environ.get(_DB_ROOT_ENV)
+    if extra:
+        for part in extra.split(os.pathsep):
+            part = part.strip()
+            if part:
+                with suppress(OSError):
+                    roots.append(Path(part).expanduser().resolve())
+    return roots
+
+
+def _resolve_safe_db_path(db_path: Path | str | None) -> Path:
+    """Validate and canonicalize ``db_path`` before any filesystem access.
+
+    - Rejects ``None``, empty strings, and paths containing NUL bytes.
+    - Expands ``~``, then resolves to an absolute canonical path (no ``..``).
+    - Requires the resolved path to live under an allowed root
+      (see :func:`_allowed_db_roots`).
+
+    This is the sanitizer for CodeQL ``py/path-injection``: every call site
+    that opens or creates the SQLite file routes through here.
+    """
+    if db_path is None:
+        raise ValueError("db_path must not be None")
+    raw = os.fspath(db_path)
+    if not raw:
+        raise ValueError("db_path must not be empty")
+    if "\x00" in raw:
+        raise ValueError("db_path must not contain NUL byte")
+
+    resolved = Path(raw).expanduser().resolve()
+
+    for root in _allowed_db_roots():
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            continue
+        return resolved
+
+    raise ValueError(
+        f"db_path {resolved} escapes the allowed roots; "
+        f"set {_DB_ROOT_ENV} to permit deployment outside ./data"
+    )
+
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """Return a new connection with sensible defaults."""
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    safe_path = _resolve_safe_db_path(db_path)
+    safe_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(safe_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -146,8 +209,9 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path = _MIGRATIONS_
 
 def init_db(db_path: Path = DB_PATH) -> int:
     """Create data dir, apply schema, run migrations, seed canonical ingredients. Returns seed row count."""
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with connect(db_path) as conn:
+    safe_path = _resolve_safe_db_path(db_path)
+    safe_path.parent.mkdir(parents=True, exist_ok=True)
+    with connect(safe_path) as conn:
         apply_schema(conn)
         run_migrations(conn)
         count = seed_canonical_ingredients(conn)
