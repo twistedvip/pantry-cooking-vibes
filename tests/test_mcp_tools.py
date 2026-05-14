@@ -144,6 +144,15 @@ def test_search_recipes_by_ingredient_unknown_returns_empty(seeded_db_path):
     assert rows == []
 
 
+def test_search_recipes_by_ingredient_substring_match(seeded_db_path):
+    """A partial term matches canonical names by substring (canonical names are
+    specific, e.g. 'chicken breast'; users type 'chicken'). 'brocc' resolves to
+    the 'broccoli' canonical and returns both seeded recipes."""
+    rows = tools.search_recipes(ingredients=["brocc"], db_path=seeded_db_path)
+    names = {r["name"] for r in rows}
+    assert names == {"Broccoli Stir Fry", "Broccoli Soup"}
+
+
 def test_search_recipes_by_ingredient_and_requires_all(seeded_db_path):
     """Only Stir Fry has the 'other' canonical (the second seeded ingredient)."""
     with connect(seeded_db_path) as conn:

@@ -53,22 +53,42 @@ def _fts5_escape_query(query: str) -> str:
     return " ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in tokens)
 
 
-def _resolve_ingredient_canonical_ids(conn: sqlite3.Connection, names: list[str]) -> list[int]:
-    """Map ingredient names → canonical_ids (case-insensitive name match).
+def _resolve_ingredient_canonical_ids(
+    conn: sqlite3.Connection, names: list[str]
+) -> list[list[int]]:
+    """Map each ingredient name → matching canonical_ids (case-insensitive substring).
 
-    Names that don't resolve are silently dropped. An empty input list (or one
-    where nothing resolves) returns ``[]``; callers should treat that as
-    "no ingredient filter."
+    Returns one id-group per non-blank input name. Matching is by substring, so
+    ``"chicken"`` resolves to every canonical containing it (``chicken breast``,
+    ``chicken thigh``, ...) — canonical names are specific, users aren't. A name
+    with no matches yields an empty group; callers treat an empty group as
+    "unsatisfiable." An empty input list returns ``[]`` ("no ingredient filter").
     """
-    cleaned = [n.strip().lower() for n in names if n and n.strip()]
-    if not cleaned:
-        return []
-    placeholders = ",".join("?" * len(cleaned))
-    rows = conn.execute(
-        f"SELECT id FROM canonical_ingredients WHERE LOWER(name) IN ({placeholders})",  # noqa: S608
-        cleaned,
-    ).fetchall()
-    return [r["id"] for r in rows]
+    groups: list[list[int]] = []
+    for raw in names:
+        term = raw.strip().lower()
+        if not term:
+            continue
+        # Escape LIKE wildcards in user input so they match literally.
+        like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        rows = conn.execute(
+            "SELECT id FROM canonical_ingredients WHERE LOWER(name) LIKE ? ESCAPE '\\'",
+            (like,),
+        ).fetchall()
+        groups.append([r["id"] for r in rows])
+    return groups
+
+
+def _canonical_id_exists_clause(ids: list[int]) -> str:
+    """SQL ``EXISTS`` fragment: recipe ``r`` has an ingredient with a canonical_id in ``ids``.
+
+    The caller must ``params.extend(ids)`` in the same order.
+    """
+    placeholders = ",".join("?" * len(ids))  # "?,?,?" from int len → safe to interpolate
+    return (
+        f"EXISTS (SELECT 1 FROM recipe_ingredients ri "  # noqa: S608
+        f"WHERE ri.recipe_id = r.id AND ri.canonical_id IN ({placeholders}))"
+    )
 
 
 def search_recipes(
@@ -145,24 +165,20 @@ def search_recipes(
 
     with connect(db) as conn:
         if ingredients:
-            ids = _resolve_ingredient_canonical_ids(conn, ingredients)
-            if not ids:
-                return []  # nothing resolved → no recipe can satisfy
+            groups = _resolve_ingredient_canonical_ids(conn, ingredients)
             if ingredient_mode == "and":
-                for cid in ids:
-                    where.append(
-                        "EXISTS (SELECT 1 FROM recipe_ingredients ri "
-                        "WHERE ri.recipe_id = r.id AND ri.canonical_id = ?)"
-                    )
-                    params.append(cid)
-            else:  # or
-                placeholders = ",".join("?" * len(ids))
-                # placeholders is "?,?,?" from int len(ids); ids are bound as params.
-                where.append(
-                    f"EXISTS (SELECT 1 FROM recipe_ingredients ri "  # noqa: S608
-                    f"WHERE ri.recipe_id = r.id AND ri.canonical_id IN ({placeholders}))"
-                )
-                params.extend(ids)
+                # Each term must be satisfied; a term may match any of its ids.
+                for ids in groups:
+                    if not ids:
+                        return []  # term resolved to nothing → unsatisfiable
+                    where.append(_canonical_id_exists_clause(ids))
+                    params.extend(ids)
+            else:  # or — any id from any term satisfies
+                all_ids = [cid for ids in groups for cid in ids]
+                if not all_ids:
+                    return []  # nothing resolved → no recipe can satisfy
+                where.append(_canonical_id_exists_clause(all_ids))
+                params.extend(all_ids)
 
         if pantry_only:
             where.append(
