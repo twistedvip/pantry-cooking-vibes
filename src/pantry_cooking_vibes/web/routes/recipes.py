@@ -92,7 +92,12 @@ def list_recipes(
             db_path=db_path,
         )
     except sqlite3.OperationalError:
-        log.exception("search_recipes failed: q=%r tags=%r", q, tag_list)
+        # Strip CR/LF before logging so a crafted ?q= / ?tags= can't forge log
+        # lines (CWE-117). The "\r\n" and "\n" replace calls are also what
+        # CodeQL recognizes as a log-injection sanitizer.
+        safe_q = q.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+        safe_tags = [t.replace("\r\n", " ").replace("\n", " ").replace("\r", " ") for t in tag_list]
+        log.exception("search_recipes failed: q=%r tags=%r", safe_q, safe_tags)
         results = []
     return render(
         request,
