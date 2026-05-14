@@ -234,6 +234,16 @@ def ingest_cmd(
             "duplicate log show what a real ingest would do."
         ),
     ),
+    normalize: bool = typer.Option(
+        True,
+        "--normalize/--no-normalize",
+        help=(
+            "After a successful ingest, fuzzy-match new recipe ingredients "
+            "against canonical_ingredients (same as `normalize-recipes`). "
+            "Use --no-normalize to skip. Skipped on --dry-run or when no "
+            "recipes were written."
+        ),
+    ),
 ) -> None:
     """Ingest a JSONL file conforming to docs/jsonl_contract.md."""
     from pantry_cooking_vibes.importers.jsonl_ingest import ingest_jsonl
@@ -288,6 +298,25 @@ def ingest_cmd(
     typer.echo(f"  tags               : {stats['tags']}")
     typer.echo(f"  skipped (invalid)  : {stats['skipped']}")
     typer.echo(f"  duplicates_skipped : {stats['duplicates_skipped']}")
+
+    if not normalize:
+        return
+    if dry_run:
+        typer.echo("normalize: skipped (dry-run)")
+        return
+    if stats["recipes"] == 0:
+        typer.echo("normalize: skipped (no recipes written)")
+        return
+
+    from pantry_cooking_vibes.importers.normalize import backfill_recipe_canonicals
+
+    norm = backfill_recipe_canonicals(db_path=db, quiet=quiet)
+    typer.echo("normalize done:")
+    typer.echo(f"  distinct texts : {norm['distinct_texts']}")
+    typer.echo(f"  auto-approved  : {norm['approved']}")
+    typer.echo(f"  proposed       : {norm['proposed']}")
+    typer.echo(f"  no_match       : {norm['no_match']}")
+    typer.echo(f"  rows updated   : {norm['rows_updated']}")
 
 
 @app.command("list-sources")
