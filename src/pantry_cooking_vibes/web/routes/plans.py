@@ -32,7 +32,7 @@ def create_plan(
     if not is_sunday(week_of):
         raise HTTPException(status_code=422, detail="week_of must be a Sunday")
     plan = tools.create_meal_plan(week_of, notes=notes or None, db_path=db_path)
-    return RedirectResponse(url=f"/plans/{plan['id']}", status_code=303)
+    return RedirectResponse(url="/plans/" + str(plan["id"]), status_code=303)
 
 
 @router.get("/{plan_id}")
@@ -59,7 +59,7 @@ def toggle_plan_favorite(
         tools.set_meal_plan_favorite(plan_id, want_fav, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    dest = safe_redirect(redirect_to, f"/plans/{plan_id}")
+    dest = safe_redirect(redirect_to, "/plans/" + str(plan_id))
     return RedirectResponse(url=dest, status_code=303)
 
 
@@ -73,7 +73,7 @@ def clone_plan(
         new_plan = tools.clone_meal_plan(plan_id, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    dest = safe_redirect(redirect_to, f"/plans/{new_plan['id']}")
+    dest = safe_redirect(redirect_to, "/plans/" + str(new_plan["id"]))
     return RedirectResponse(url=dest, status_code=303)
 
 
@@ -88,7 +88,7 @@ def delete_plan_item(
         tools.remove_meal_plan_item_from_plan(plan_id, item_id, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    dest = safe_redirect(redirect_to, f"/plans/{plan_id}")
+    dest = safe_redirect(redirect_to, "/plans/" + str(plan_id))
     return RedirectResponse(url=dest, status_code=303)
 
 
