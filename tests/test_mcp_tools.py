@@ -339,6 +339,13 @@ def test_find_canonical_no_match(seeded_db_path):
     assert tools.find_canonical_ingredient("zzzzzqxxxnomatch", db_path=seeded_db_path) == []
 
 
+def test_find_canonical_includes_freshness_days(seeded_db_path):
+    rows = tools.find_canonical_ingredient("broccoli", db_path=seeded_db_path)
+    assert rows
+    assert "freshness_days" in rows[0]
+    assert rows[0]["freshness_days"] == 5  # broccoli: 3-5 days fridge
+
+
 # ---------- meal plan ----------
 
 

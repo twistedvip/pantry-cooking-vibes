@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -27,6 +28,10 @@ def pantry_page(
     suggestions = (
         tools.find_canonical_ingredient(search, limit=20, db_path=db_path) if search.strip() else []
     )
+    today = date.today()
+    for s in suggestions:
+        fd = s.get("freshness_days")
+        s["suggested_expires_at"] = (today + timedelta(days=fd)).isoformat() if fd else ""
     return render(
         request,
         "pantry/list.html",

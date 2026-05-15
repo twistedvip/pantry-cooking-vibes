@@ -325,6 +325,41 @@ def test_migration_005_applied_idempotent(db_path):
     assert "idx_meal_plans_week_draft" in indexes
 
 
+# ---------- migration 006 ----------
+
+
+def test_migration_006_adds_freshness_days_column(db_path):
+    with connect(db_path) as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(canonical_ingredients)")}
+    assert "freshness_days" in cols
+
+
+def test_migration_006_sets_freshness_days_for_known_categories(db_path):
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT freshness_days FROM canonical_ingredients WHERE name = 'broccoli'"
+        ).fetchone()
+    assert row is not None
+    assert row["freshness_days"] == 5  # broccoli: 3-5 days fridge
+
+
+def test_migration_006_protein_freshness(db_path):
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT freshness_days FROM canonical_ingredients WHERE name = 'chicken breast'"
+        ).fetchone()
+    assert row is not None
+    assert row["freshness_days"] == 2  # raw chicken: 1-2 days fridge
+
+
+def test_seed_populates_freshness_days_on_fresh_db(db_path):
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT freshness_days FROM canonical_ingredients WHERE freshness_days IS NULL"
+        ).fetchall()
+    assert len(rows) == 0
+
+
 def test_meal_plans_partial_unique_index_blocks_duplicate_drafts(db_path):
     """The partial unique index prevents two draft plans for the same week_of."""
     import sqlite3
