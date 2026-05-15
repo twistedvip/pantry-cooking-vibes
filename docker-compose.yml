@@ -1,34 +1,37 @@
-# Pattern B deployment: Portainer (or local `docker compose`) builds the image
-# from the public git repo at deploy time. No registry required.
+# Default deployment: pull pre-built multi-arch image from GHCR.
+# Image published by .github/workflows/release.yml on every `v*` tag.
 #
 # Portainer Stack import:
 #   1. Stacks → Add stack → "Repository"
 #   2. Git URL: https://github.com/twistedvip/pantry-cooking-vibes
 #   3. Compose path: docker-compose.yml
-#   4. Optionally pin a tag/branch via PCV_GIT_REF (default: main)
-#   5. Deploy. Portainer pulls + builds on the agent host.
+#   4. (Optional) env var PCV_TAG=v0.1.0 to pin a specific release
+#   5. Deploy. "Pull and redeploy" works because the image lives in a registry.
 #
 # Local equivalent:
-#   docker compose up -d --build
+#   docker compose pull && docker compose up -d
 #
-# Override port:           PCV_PORT=9000 docker compose up -d
-# Override pinned commit:  PCV_GIT_REF=v0.2.0 docker compose up -d --build
+# Override port:    PCV_PORT=9000 docker compose up -d
+# Pin a release:    PCV_TAG=v0.1.0 docker compose up -d
+#
+# Build-from-source alternative (no registry needed): uncomment the `build:`
+# block below and comment out the `image:` line. Then PCV_GIT_REF selects the
+# ref (branch/tag/sha) to build, default `main`.
 #
 # Database persistence:
 #   The named volume `meal_data` holds /app/data/store/app.db. It survives
-#   `docker compose down`, image rebuilds, and Portainer "Pull and redeploy".
+#   `docker compose down`, image pulls, and Portainer "Pull and redeploy".
 #   Only `docker compose down -v` or `docker volume rm <stack>_meal_data`
 #   wipes it. Back up the SQLite file with `meal-cli db-backup` or by
 #   copying /var/lib/docker/volumes/<stack>_meal_data/_data/app.db.
 
 services:
   meal-planner:
-    # Build from the public git repo. The `#` fragment selects a ref
-    # (branch / tag / sha). Default `main` follows latest.
-    build:
-      context: "https://github.com/twistedvip/pantry-cooking-vibes.git#${PCV_GIT_REF:-main}"
-      dockerfile: Dockerfile
-    image: pantry-cooking-vibes:${PCV_GIT_REF:-main}
+    image: ghcr.io/twistedvip/pantry-cooking-vibes:${PCV_TAG:-latest}
+    # Build-from-source alternative — see header. Uncomment + comment `image:` above.
+    # build:
+    #   context: "https://github.com/twistedvip/pantry-cooking-vibes.git#${PCV_GIT_REF:-main}"
+    #   dockerfile: Dockerfile
     container_name: meal-planner
     restart: unless-stopped
 
