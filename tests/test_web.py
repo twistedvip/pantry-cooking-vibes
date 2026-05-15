@@ -915,6 +915,34 @@ def test_post_recipe_add_to_current_week_missing_recipe(client: TestClient):
     assert r.status_code == 404
 
 
+def test_post_recipe_add_to_plan_explicit_week_of(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"week_of": "2026-06-07"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    plan_id = int(r.headers["location"].split("/plans/")[1])
+    with connect(seeded_db_path) as conn:
+        plan = conn.execute("SELECT week_of FROM meal_plans WHERE id = ?", (plan_id,)).fetchone()
+    assert plan["week_of"] == "2026-06-07"
+
+
+def test_post_recipe_add_to_plan_non_sunday_week_of_rejected(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes LIMIT 1").fetchone()["id"]
+
+    r = client.post(
+        f"/recipes/{rid}/add-to-current-week",
+        data={"week_of": "2026-06-08"},  # Monday
+        follow_redirects=False,
+    )
+    assert r.status_code == 422
+
+
 def test_post_plan_favorite_toggle(client: TestClient, seeded_db_path):
     with connect(seeded_db_path) as conn:
         plan_id = conn.execute(

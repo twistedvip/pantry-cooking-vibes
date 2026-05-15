@@ -579,6 +579,29 @@ def test_add_to_current_week_plan_missing_recipe_raises(seeded_db_path):
         tools.add_to_current_week_plan(99999, db_path=seeded_db_path)
 
 
+def test_add_to_current_week_plan_explicit_week_of(seeded_db_path):
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    week_of = "2026-06-07"  # a known Sunday
+    result = tools.add_to_current_week_plan(recipe["id"], week_of=week_of, db_path=seeded_db_path)
+    plan = tools.get_meal_plan(result["plan_id"], db_path=seeded_db_path)
+    assert plan is not None
+    assert plan["week_of"] == week_of
+
+
+def test_add_to_current_week_plan_explicit_week_of_reuses_draft(seeded_db_path):
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    week_of = "2026-06-07"
+    r1 = tools.add_to_current_week_plan(recipe["id"], week_of=week_of, db_path=seeded_db_path)
+    r2 = tools.add_to_current_week_plan(recipe["id"], week_of=week_of, db_path=seeded_db_path)
+    assert r1["plan_id"] == r2["plan_id"]
+
+
+def test_add_to_current_week_plan_invalid_week_of_raises(seeded_db_path):
+    recipe = tools.search_recipes(db_path=seeded_db_path)[0]
+    with pytest.raises(ValueError):
+        tools.add_to_current_week_plan(recipe["id"], week_of="not-a-date", db_path=seeded_db_path)
+
+
 # ---------- set_meal_plan_favorite ----------
 
 

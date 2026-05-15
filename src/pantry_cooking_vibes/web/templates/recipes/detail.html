@@ -37,9 +37,13 @@
             {{ '★ favorited' if recipe.is_favorite else '☆ favorite' }}
           </button>
         </form>
-        <form method="post" action="/recipes/{{ recipe.id }}/add-to-current-week" style="display:inline">
+        <form method="post" action="/recipes/{{ recipe.id }}/add-to-current-week" class="add-to-plan-form">
           <input type="hidden" name="redirect_to" value="/recipes/{{ recipe.id }}">
-          <button type="submit" class="btn primary" title="Add to this week's meal plan">+ Add to this week</button>
+          <select name="week_of" class="week-select">
+            <option value="{{ current_week }}"{% if not suggest_next_week %} selected{% endif %}>This week ({{ current_week }})</option>
+            <option value="{{ next_week }}"{% if suggest_next_week %} selected{% endif %}>Next week ({{ next_week }})</option>
+          </select>
+          <button type="submit" class="btn primary">+ Add to plan</button>
         </form>
       </div>
     </div>

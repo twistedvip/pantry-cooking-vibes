@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
+from pantry_cooking_vibes.dates import current_sunday, is_sunday, is_week_halfway_over, next_sunday
 from pantry_cooking_vibes.mcp_server import tools
 from pantry_cooking_vibes.web.deps import get_db_path, render, safe_redirect
 
@@ -129,10 +130,19 @@ def recipe_detail(
     if recipe is None:
         raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
     pantry_canonical_ids = {p["canonical_id"] for p in tools.list_pantry(db_path=db_path)}
+    current_week = current_sunday().isoformat()
+    next_week = next_sunday().isoformat()
+    suggest_next_week = is_week_halfway_over()
     return render(
         request,
         "recipes/detail.html",
-        {"recipe": recipe, "pantry_canonical_ids": pantry_canonical_ids},
+        {
+            "recipe": recipe,
+            "pantry_canonical_ids": pantry_canonical_ids,
+            "current_week": current_week,
+            "next_week": next_week,
+            "suggest_next_week": suggest_next_week,
+        },
     )
 
 
@@ -169,12 +179,17 @@ def toggle_favorite(
 @router.post("/{recipe_id}/add-to-current-week")
 def add_to_current_week(
     recipe_id: int,
+    week_of: str = Form(""),
     redirect_to: str = Form(""),
     db_path: Path = Depends(get_db_path),
 ) -> RedirectResponse:
-    """Add a recipe to the current week's draft meal plan."""
+    """Add a recipe to a draft meal plan for the chosen week."""
+    if not week_of:
+        week_of = current_sunday().isoformat()
+    if not is_sunday(week_of):
+        raise HTTPException(status_code=422, detail="week_of must be a Sunday")
     try:
-        result = tools.add_to_current_week_plan(recipe_id, db_path=db_path)
+        result = tools.add_to_current_week_plan(recipe_id, week_of=week_of, db_path=db_path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     dest = safe_redirect(redirect_to, "/plans/" + str(result["plan_id"]))
