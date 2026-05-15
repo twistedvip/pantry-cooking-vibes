@@ -487,12 +487,22 @@ def remove_meal_plan_item_from_plan(
     return {"removed": True, "plan_id": int(plan_id), "item_id": int(item_id)}
 
 
-def add_to_current_week_plan(recipe_id: int, *, db_path: Path | None = None) -> dict:
-    """Find-or-create draft plan for current_sunday() then insert item, atomic.
+def add_to_current_week_plan(
+    recipe_id: int,
+    week_of: str | None = None,
+    *,
+    db_path: Path | None = None,
+) -> dict:
+    """Find-or-create draft plan for ``week_of`` (defaults to current_sunday()) then insert item.
 
+    ``week_of`` must be an ISO date string; if omitted the current week is used.
     Opens its own connection. Do not share connections across threads.
     """
-    sunday = current_sunday().isoformat()
+    if week_of is not None:
+        _validate_week_of(week_of)
+        sunday = week_of
+    else:
+        sunday = current_sunday().isoformat()
     db = db_path or DB_PATH
     with connect(db) as conn:
         exists = conn.execute("SELECT 1 FROM recipes WHERE id = ?", (int(recipe_id),)).fetchone()
