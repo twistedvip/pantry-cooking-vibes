@@ -87,7 +87,7 @@ src/pantry_cooking_vibes/
   web/                  # FastAPI app, routes, Jinja templates, static assets
   _assets/              # packaged sql/csv shipped in the wheel
     schema.sql          # idempotent baseline schema
-    migrations/         # *.sql applied after schema, tracked in schema_migrations
+    migrations/         # *.sql applied after schema, tracked in schema_migrations (empty at v0.1.0)
     canonical_seed.csv  # canonical_ingredients seed data
 data/
   app.db                # default SQLite database (runtime, not packaged)

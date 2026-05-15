@@ -22,8 +22,9 @@ meal-cli db-init
 ```
 
 Safe to re-run. Idempotent at every level — schema uses `CREATE IF NOT
-EXISTS`, migrations are tracked in `schema_migrations`, and seed uses
-`INSERT OR IGNORE`.
+EXISTS`, migrations are tracked in `schema_migrations` (empty at
+v0.1.0; the prior 001–006 sequence was folded into the baseline
+schema), and seed uses `INSERT OR IGNORE`.
 
 ### `meal-cli db-backup <dest>`
 

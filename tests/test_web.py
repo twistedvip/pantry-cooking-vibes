@@ -639,7 +639,18 @@ def test_serve_web_applies_pending_migrations(tmp_path, monkeypatch):
     (fake_migrations / "9001_synthetic_pending.sql").write_text(
         "CREATE TABLE IF NOT EXISTS synthetic_marker (id INTEGER PRIMARY KEY);"
     )
-    monkeypatch.setattr(db_module, "_MIGRATIONS_DIR", fake_migrations)
+
+    # run_migrations() binds _MIGRATIONS_DIR at definition time via its default
+    # arg, so patching the module constant doesn't affect existing calls. Wrap
+    # the function so the cli's `from ... import run_migrations` (which does a
+    # module-attribute lookup at call time) picks up the synthetic dir.
+    from functools import partial
+
+    monkeypatch.setattr(
+        db_module,
+        "run_migrations",
+        partial(db_module.run_migrations, migrations_dir=fake_migrations),
+    )
 
     # Stub uvicorn so serve-web runs its bootstrap without binding a port.
     invoked = {}
