@@ -380,7 +380,7 @@ def find_canonical_ingredient(
     limit = _clamp_limit(limit)
     with connect(db) as conn:
         rows = conn.execute(
-            "SELECT id, name, category, default_unit, aliases "
+            "SELECT id, name, category, default_unit, aliases, freshness_days "
             "FROM canonical_ingredients "
             "WHERE LOWER(name) LIKE ? OR LOWER(aliases) LIKE ? "
             "ORDER BY CASE WHEN LOWER(name) = ? THEN 0 "

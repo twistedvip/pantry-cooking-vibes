@@ -36,7 +36,7 @@
         {% if s.category %}<span class="category">{{ s.category }}</span>{% endif %}
         <label>qty <input type="number" name="quantity" step="0.01" min="0" value="1" required></label>
         <label>unit <input type="text" name="unit" value="{{ s.default_unit or '' }}" placeholder="lb, cup, count"></label>
-        <label>expires <input type="date" name="expires_at"></label>
+        <label>expires <input type="date" name="expires_at" value="{{ s.suggested_expires_at }}"{% if s.suggested_expires_at %} title="suggested: {{ s.freshness_days }} days"{% endif %}></label>
         <label>note <input type="text" name="note" placeholder="optional"></label>
         <button type="submit" class="primary">Add</button>
       </form>

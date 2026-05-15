@@ -371,6 +371,15 @@ def test_pantry_search_shows_suggestions(client: TestClient):
     assert "canonical_id" in r.text
 
 
+def test_pantry_search_suggestion_has_freshness_date(client: TestClient):
+    from datetime import date, timedelta
+
+    r = client.get("/pantry", params={"search": "broccoli"})
+    assert r.status_code == 200
+    expected = (date.today() + timedelta(days=5)).isoformat()
+    assert expected in r.text
+
+
 def test_pantry_search_no_match_shows_empty(client: TestClient):
     r = client.get("/pantry", params={"search": "zzzznoingredientzzz"})
     assert r.status_code == 200

@@ -152,6 +152,9 @@ def seed_canonical_ingredients(conn: sqlite3.Connection, seed_path: Path = SEED_
     if not seed_path.exists():
         return 0
 
+    has_freshness = any(
+        r[1] == "freshness_days" for r in conn.execute("PRAGMA table_info(canonical_ingredients)")
+    )
     inserted = 0
     with seed_path.open(encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
@@ -159,19 +162,43 @@ def seed_canonical_ingredients(conn: sqlite3.Connection, seed_path: Path = SEED_
             name = (row.get("name") or "").strip()
             if not name:
                 continue
-            cur = conn.execute(
-                """
-                INSERT INTO canonical_ingredients (name, category, default_unit, aliases)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(name) DO NOTHING
-                """,
-                (
-                    name.lower(),
-                    (row.get("category") or "").strip() or None,
-                    (row.get("default_unit") or "").strip() or None,
-                    (row.get("aliases") or "[]").strip(),
-                ),
-            )
+            if has_freshness:
+                raw_fd = (row.get("freshness_days") or "").strip()
+                freshness_days: int | None = int(raw_fd) if raw_fd.isdigit() else None
+                cur = conn.execute(
+                    """
+                    INSERT INTO canonical_ingredients (name, category, default_unit, aliases, freshness_days)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(name) DO NOTHING
+                    """,
+                    (
+                        name.lower(),
+                        (row.get("category") or "").strip() or None,
+                        (row.get("default_unit") or "").strip() or None,
+                        (row.get("aliases") or "[]").strip(),
+                        freshness_days,
+                    ),
+                )
+                if cur.rowcount == 0:
+                    # Row already exists — sync freshness_days if the seed value changed.
+                    conn.execute(
+                        "UPDATE canonical_ingredients SET freshness_days = ? WHERE name = ? AND (freshness_days IS NULL OR freshness_days != ?)",
+                        (freshness_days, name.lower(), freshness_days),
+                    )
+            else:
+                cur = conn.execute(
+                    """
+                    INSERT INTO canonical_ingredients (name, category, default_unit, aliases)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(name) DO NOTHING
+                    """,
+                    (
+                        name.lower(),
+                        (row.get("category") or "").strip() or None,
+                        (row.get("default_unit") or "").strip() or None,
+                        (row.get("aliases") or "[]").strip(),
+                    ),
+                )
             inserted += cur.rowcount
     return inserted
 
