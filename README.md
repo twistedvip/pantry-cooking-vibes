@@ -22,18 +22,26 @@ MCP server will be focused on next.
 
 ```bash
 uv sync
-meal-cli db-init                                      # create data/app.db
-meal-cli ingest data/seed/demo.jsonl --source manual  # load demo recipe
-meal-cli serve-web                                    # http://127.0.0.1:8000
+meal-cli start                                        # http://127.0.0.1:8000
 ```
 
-`data/seed/demo.jsonl` ships one recipe (chicken fried rice) so a fresh
-install isn't empty. From there, ingest more JSONL produced by a scraper
-of your choice, or import single recipes by URL:
+`meal-cli start` initializes `data/app.db` on first run (printing the
+path before doing so) and then boots the FastAPI web UI. Re-running
+`start` reuses the existing database. For scripted deployments that
+need an explicit `db-init` step (e.g. CI), use `meal-cli serve-web`,
+which exits 1 if the database is missing.
+
+The empty database has no recipes yet. Load the bundled demo recipe
+or import your own:
 
 ```bash
+meal-cli ingest data/seed/demo.jsonl --source manual  # one demo recipe (chicken fried rice)
 meal-cli import-url https://www.seriouseats.com/.../recipe
 ```
+
+From there, ingest more JSONL produced by a scraper of your choice
+([`docs/jsonl_contract.md`](docs/jsonl_contract.md)) or keep importing
+single URLs.
 
 ## Feature map
 
@@ -87,7 +95,7 @@ src/pantry_cooking_vibes/
   web/                  # FastAPI app, routes, Jinja templates, static assets
   _assets/              # packaged sql/csv shipped in the wheel
     schema.sql          # idempotent baseline schema
-    migrations/         # *.sql applied after schema, tracked in schema_migrations
+    migrations/         # *.sql applied after schema, tracked in schema_migrations (empty at v0.1.0)
     canonical_seed.csv  # canonical_ingredients seed data
 data/
   app.db                # default SQLite database (runtime, not packaged)

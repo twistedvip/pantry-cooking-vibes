@@ -23,7 +23,7 @@ on machines without Playwright browsers installed.
 | File                              | Scope                                                            |
 | --------------------------------- | ---------------------------------------------------------------- |
 | `tests/conftest.py`               | `db_path` + `seeded_db_path` fixtures (see below).               |
-| `tests/test_db.py`                | Schema apply, migrations, seed loader.                           |
+| `tests/test_db.py`                | Schema apply, migration machinery, seed loader.                  |
 | `tests/test_mcp_tools.py`         | Pure `tools.py` functions — framework-free.                      |
 | `tests/test_url_import.py`        | JSON-LD extraction, `parse_recipe`, duration parsing, end-to-end import with stubbed HTML. |
 | `tests/test_jsonl_ingest.py`      | JSONL contract validation, ingest UPSERT semantics, plugin post-process hook. |
@@ -58,11 +58,15 @@ default views without introducing test cross-talk.
 Because `init_db` runs migrations inside the fixture, every test
 naturally runs against the latest schema — which means a regression of
 the form "code references a new table that isn't in `schema.sql`" will
-be caught as soon as the test hits it. The `recipe_favorites` crash
-wasn't caught by existing tests for a different reason: the live
-`data/app.db` had never had migrations applied. See
-`test_serve_web_applies_pending_migrations` in `test_web.py` for the
-regression guard added after that incident.
+be caught as soon as the test hits it.
+
+At v0.1.0 the migrations directory is empty (the 001–006 sequence was
+collapsed into the baseline schema), so `run_migrations` is a no-op
+during fixture setup. The `serve-web` bootstrap still calls it on
+startup as a self-heal step for older deployed DBs that predate a
+future migration; `test_serve_web_applies_pending_migrations` in
+`test_web.py` exercises that path by injecting a synthetic pending
+migration via `monkeypatch.setattr(db, "_MIGRATIONS_DIR", ...)`.
 
 ## Testing the FastAPI app
 

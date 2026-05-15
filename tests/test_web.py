@@ -618,36 +618,41 @@ def test_app_factory_importable():
 
 
 def test_serve_web_applies_pending_migrations(tmp_path, monkeypatch):
-    """Regression: a DB created before migrations were tracked (schema applied,
-    schema_migrations empty, user_version=0) used to crash. serve-web must
-    bring the DB up to date before uvicorn starts.
+    """Regression: serve-web must apply any pending migrations before binding
+    a port, so a stale DB never surfaces as a 500 at query time.
 
-    Even though schema.sql now creates the favorites tables directly (so a
-    fresh DB doesn't need migrations), this test still verifies that the
-    serve-web bootstrap runs the migration sweep against a stale DB.
+    v0.1.0 ships zero migration files. To exercise the bootstrap, this test
+    redirects the migrations dir to a tmp_path containing a synthetic pending
+    migration and confirms serve-web applies it.
     """
     from typer.testing import CliRunner
 
+    from pantry_cooking_vibes import db as db_module
     from pantry_cooking_vibes.cli import app as cli_app
-    from pantry_cooking_vibes.db import apply_schema, get_connection
+    from pantry_cooking_vibes.db import get_connection, init_db
 
-    # Simulate the pre-migration state: schema applied, schema_migrations empty,
-    # user_version reset to 0 (the legacy state migrations are designed to repair).
-    db = tmp_path / "stale.db"
-    conn = get_connection(db)
-    try:
-        apply_schema(conn)
-        conn.execute("PRAGMA user_version = 0")
-        conn.execute("DROP TABLE IF EXISTS schema_migrations")
-        conn.commit()
-    finally:
-        conn.close()
+    db = tmp_path / "app.db"
+    init_db(db_path=db)
 
-    with get_connection(db) as conn:
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
-    assert version == 0, "precondition: DB is pre-migration"
+    fake_migrations = tmp_path / "migrations"
+    fake_migrations.mkdir()
+    (fake_migrations / "9001_synthetic_pending.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS synthetic_marker (id INTEGER PRIMARY KEY);"
+    )
 
-    # Stub uvicorn so serve-web runs its bootstrap without actually binding a port.
+    # run_migrations() binds _MIGRATIONS_DIR at definition time via its default
+    # arg, so patching the module constant doesn't affect existing calls. Wrap
+    # the function so the cli's `from ... import run_migrations` (which does a
+    # module-attribute lookup at call time) picks up the synthetic dir.
+    from functools import partial
+
+    monkeypatch.setattr(
+        db_module,
+        "run_migrations",
+        partial(db_module.run_migrations, migrations_dir=fake_migrations),
+    )
+
+    # Stub uvicorn so serve-web runs its bootstrap without binding a port.
     invoked = {}
 
     def fake_run(*args, **kwargs):
@@ -659,14 +664,15 @@ def test_serve_web_applies_pending_migrations(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert invoked.get("ran") is True
     assert "Applied pending migrations" in result.output
-    assert "001_recipe_favorites.sql" in result.output
+    assert "9001_synthetic_pending.sql" in result.output
 
-    # After serve-web bootstrap, user_version reflects the highest applied migration.
     with get_connection(db) as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         recorded = {r[0] for r in conn.execute("SELECT filename FROM schema_migrations").fetchall()}
-    assert version > 0
-    assert "001_recipe_favorites.sql" in recorded
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert version == 9001
+    assert "9001_synthetic_pending.sql" in recorded
+    assert "synthetic_marker" in tables
 
 
 def test_db_backup_missing_source_exits_cleanly(tmp_path):

@@ -1,11 +1,12 @@
 # Database
 
 SQLite file at `data/app.db`, WAL mode, foreign keys enforced. The full
-baseline lives in [`src/pantry_cooking_vibes/_assets/schema.sql`](../src/pantry_cooking_vibes/_assets/schema.sql);
-additive changes ship as migrations in
-[`src/pantry_cooking_vibes/_assets/migrations/`](../src/pantry_cooking_vibes/_assets/migrations).
-These files are packaged inside the wheel so consumers installing the project
-as a dependency get them without a source checkout.
+baseline lives in [`src/pantry_cooking_vibes/_assets/schema.sql`](../src/pantry_cooking_vibes/_assets/schema.sql).
+Post-v0.1.0 additive changes ship as migrations in
+[`src/pantry_cooking_vibes/_assets/migrations/`](../src/pantry_cooking_vibes/_assets/migrations)
+(empty at v0.1.0; v0.1.0 collapsed the prior 001–006 sequence into the
+baseline schema). These files are packaged inside the wheel so consumers
+installing the project as a dependency get them without a source checkout.
 
 ## Tables (brief)
 
@@ -16,7 +17,7 @@ as a dependency get them without a source checkout.
 | `recipes_fts`              | FTS5 virtual table mirroring `recipes.name` + `instructions_md`. Kept in sync via triggers. |
 | `recipe_ingredients`       | Per-recipe ingredient rows. `canonical_id` is nullable — unmapped ingredients keep their `original_text`. |
 | `recipe_tags`              | `(recipe_id, tag)` many-to-many.                             |
-| `recipe_favorites`         | `recipe_id` PK. Added in migration `001_recipe_favorites.sql`. |
+| `recipe_favorites`         | `recipe_id` PK. Web-only feature; not exposed via MCP.       |
 | `pantry`                   | Items the user owns, keyed by `canonical_id`.                |
 | `meal_plans`               | One row per plan; `week_of` ISO date, `status` draft/confirmed. |
 | `meal_plan_items`          | Recipes attached to a plan with optional `day` / `meal_slot`. |
@@ -29,10 +30,9 @@ as a dependency get them without a source checkout.
 Free-form text. Set at ingest time (`meal-cli ingest <file> --source NAME`)
 and validated against `^[a-z][a-z0-9-]*$` by `pantry_cooking_vibes.models.SOURCE_NAME_RE`.
 
-History: the column originally had a CHECK constraint enumerating known
-sources. Migration `003_recipes_source_freeform.sql` rebuilt the table
-without that constraint so external scrapers can register new sources
-without core changes.
+No CHECK constraint on the column — validation is enforced at the
+application layer so external scrapers can register new source names
+without a schema migration.
 
 `tools.list_recipe_sources` (used by `meal-cli list-sources` and the web)
 runs `SELECT DISTINCT source FROM recipes` so new values surface
@@ -69,7 +69,8 @@ things, idempotently:
    `INSERT OR IGNORE`.
 
 `serve-web` calls `run_migrations` during startup so a DB that predates a new
-migration self-heals before the first request.
+migration self-heals before the first request. v0.1.0 ships zero migration
+files, so `run_migrations` is a no-op until a future release adds one.
 
 ## Adding a migration
 

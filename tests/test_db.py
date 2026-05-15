@@ -1,4 +1,4 @@
-"""Tests for db init, schema, migrations, FTS triggers, seed loader."""
+"""Tests for db init, schema, migration machinery, FTS triggers, seed loader."""
 
 from __future__ import annotations
 
@@ -30,50 +30,6 @@ def test_init_db_creates_parent_directory(tmp_path):
     nested = tmp_path / "deep" / "nested" / "app.db"
     init_db(db_path=nested)
     assert nested.exists()
-
-
-def test_migration_004_purges_image_less_recipes(db_path):
-    from pantry_cooking_vibes.db import _MIGRATIONS_DIR
-
-    migration = (_MIGRATIONS_DIR / "004_drop_recipes_without_image.sql").read_text(encoding="utf-8")
-
-    with connect(db_path) as conn:
-        ok = conn.execute(
-            "INSERT INTO recipes (source, source_id, name, image_url) "
-            "VALUES ('manual', 'ok', 'Has Pic', 'https://example.com/p.jpg') RETURNING id"
-        ).fetchone()["id"]
-        null_img = conn.execute(
-            "INSERT INTO recipes (source, source_id, name, image_url) "
-            "VALUES ('manual', 'null', 'No Pic', NULL) RETURNING id"
-        ).fetchone()["id"]
-        blank_img = conn.execute(
-            "INSERT INTO recipes (source, source_id, name, image_url) "
-            "VALUES ('manual', 'blank', 'Blank Pic', '   ') RETURNING id"
-        ).fetchone()["id"]
-        conn.execute(
-            "INSERT INTO recipe_ingredients (recipe_id, original_text) VALUES (?, 'x')",
-            (null_img,),
-        )
-        conn.execute("INSERT INTO recipe_tags VALUES (?, 'tag')", (blank_img,))
-
-        conn.executescript(migration)
-
-        kept = {r["id"] for r in conn.execute("SELECT id FROM recipes")}
-        assert kept == {ok}
-
-        orphans = conn.execute(
-            "SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id IN (?, ?)",
-            (null_img, blank_img),
-        ).fetchone()[0]
-        assert orphans == 0
-        orphan_tags = conn.execute(
-            "SELECT COUNT(*) FROM recipe_tags WHERE recipe_id IN (?, ?)",
-            (null_img, blank_img),
-        ).fetchone()[0]
-        assert orphan_tags == 0
-
-        fts_ids = {r[0] for r in conn.execute("SELECT rowid FROM recipes_fts").fetchall()}
-        assert null_img not in fts_ids and blank_img not in fts_ids
 
 
 def test_get_connection_pragmas(db_path):
@@ -202,17 +158,13 @@ def test_run_migrations_applies_unknown_files_once(tmp_path):
     assert applied2 == []
 
 
-def test_run_migrations_sets_user_version(tmp_path):
-    """After applying real migrations, PRAGMA user_version reflects the highest version."""
+def test_run_migrations_user_version_baseline(tmp_path):
+    """v0.1.0 ships zero migrations, so a fresh DB has user_version=0."""
     db = tmp_path / "app.db"
     init_db(db_path=db)
     with connect(db) as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-    # user_version tracks the highest migration on disk.
-    from pantry_cooking_vibes.db import _MIGRATIONS_DIR
-
-    expected = max(int(p.name.split("_", 1)[0]) for p in _MIGRATIONS_DIR.glob("*.sql"))
-    assert version == expected
+    assert version == 0
 
 
 def test_run_migrations_skips_when_user_version_advanced(tmp_path):
@@ -220,9 +172,12 @@ def test_run_migrations_skips_when_user_version_advanced(tmp_path):
     db = tmp_path / "app.db"
     init_db(db_path=db)
 
+    # Bootstrap user_version above the migration's version so it must be skipped.
+    with connect(db) as conn:
+        conn.execute("PRAGMA user_version = 5")
+
     migrations = tmp_path / "migrations"
     migrations.mkdir()
-    # Lower version than current user_version (=2) — should be skipped.
     (migrations / "0001_old.sql").write_text(
         "CREATE TABLE IF NOT EXISTS should_not_exist (id INTEGER PRIMARY KEY);"
     )
@@ -307,34 +262,33 @@ def test_seed_loader_idempotent(tmp_path):
     assert second == 0
 
 
-# ---------- migration 005 ----------
+# ---------- schema baseline (v0.1.0) ----------
 
 
-def test_migration_005_applied_idempotent(db_path):
-    """Migration 005 is already applied by init_db. Re-running returns []."""
+def test_schema_baseline_tables_present(db_path):
+    """v0.1.0 schema includes meal_plan_favorites + partial-unique draft index."""
+    with connect(db_path) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert "meal_plan_favorites" in tables
+    assert "recipe_favorites" in tables
+    assert "idx_meal_plans_week_draft" in indexes
+
+
+def test_schema_baseline_run_migrations_noop(db_path):
+    """v0.1.0 ships zero migration files — run_migrations returns []."""
     with connect(db_path) as conn:
         applied = run_migrations(conn)
     assert applied == []
 
-    with connect(db_path) as conn:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "meal_plan_favorites" in tables
 
-    with connect(db_path) as conn:
-        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    assert "idx_meal_plans_week_draft" in indexes
-
-
-# ---------- migration 006 ----------
-
-
-def test_migration_006_adds_freshness_days_column(db_path):
+def test_schema_has_freshness_days_column(db_path):
     with connect(db_path) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(canonical_ingredients)")}
     assert "freshness_days" in cols
 
 
-def test_migration_006_sets_freshness_days_for_known_categories(db_path):
+def test_seed_freshness_days_broccoli(db_path):
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT freshness_days FROM canonical_ingredients WHERE name = 'broccoli'"
@@ -343,7 +297,7 @@ def test_migration_006_sets_freshness_days_for_known_categories(db_path):
     assert row["freshness_days"] == 5  # broccoli: 3-5 days fridge
 
 
-def test_migration_006_protein_freshness(db_path):
+def test_seed_freshness_days_chicken_breast(db_path):
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT freshness_days FROM canonical_ingredients WHERE name = 'chicken breast'"

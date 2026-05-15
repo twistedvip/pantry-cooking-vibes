@@ -7,11 +7,12 @@ PRAGMA foreign_keys = ON;
 -- canonical_ingredients
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS canonical_ingredients (
-    id           INTEGER PRIMARY KEY,
-    name         TEXT    NOT NULL UNIQUE,  -- 'broccoli', 'chicken breast'
-    category     TEXT,                     -- 'vegetable','protein','grain','dairy',...
-    default_unit TEXT,                     -- 'lb','oz','count','cup'
-    aliases      TEXT    DEFAULT '[]'      -- JSON array: ['broccolini','broccoli florets']
+    id             INTEGER PRIMARY KEY,
+    name           TEXT    NOT NULL UNIQUE,  -- 'broccoli', 'chicken breast'
+    category       TEXT,                     -- 'vegetable','protein','grain','dairy',...
+    default_unit   TEXT,                     -- 'lb','oz','count','cup'
+    aliases        TEXT    DEFAULT '[]',     -- JSON array: ['broccolini','broccoli florets']
+    freshness_days INTEGER                   -- shelf life estimate; seeded from canonical_seed.csv
 );
 
 CREATE INDEX IF NOT EXISTS idx_canonical_ingredients_name
@@ -22,8 +23,10 @@ CREATE INDEX IF NOT EXISTS idx_canonical_ingredients_name
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS recipes (
     id               INTEGER PRIMARY KEY,
-    source           TEXT    NOT NULL CHECK (source IN ('hungryroot','url','manual')),
-    source_id        TEXT,              -- HR pairing id, original URL, or NULL
+    -- Free-form text validated at the application layer (lowercase, [a-z0-9-]).
+    -- No CHECK constraint so plugin-registered sources don't need a migration.
+    source           TEXT    NOT NULL,
+    source_id        TEXT,              -- original source id, URL, or NULL
     name             TEXT    NOT NULL,
     cooking_time_min INTEGER CHECK (cooking_time_min IS NULL OR cooking_time_min >= 0),
     servings         INTEGER CHECK (servings IS NULL OR servings >= 1),
@@ -135,8 +138,6 @@ CREATE INDEX IF NOT EXISTS idx_meal_plans_week_of
 
 -- Partial unique index: at most one draft plan per week_of. Confirmed plans
 -- are unconstrained (multiple confirmed plans for the same week are fine).
--- Originally added in migration 005; included here so fresh DBs get the same
--- invariant as migrated ones.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_week_draft
     ON meal_plans (week_of) WHERE status = 'draft';
 
@@ -197,7 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_ingredient_mapping_queue_source_key
     ON ingredient_mapping_queue (source, source_key);
 
 -- ---------------------------------------------------------------------------
--- recipe_favorites  (originally migration 001)
+-- recipe_favorites
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS recipe_favorites (
     recipe_id    INTEGER PRIMARY KEY,
@@ -206,7 +207,7 @@ CREATE TABLE IF NOT EXISTS recipe_favorites (
 );
 
 -- ---------------------------------------------------------------------------
--- meal_plan_favorites  (originally migration 005)
+-- meal_plan_favorites
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS meal_plan_favorites (
     plan_id    INTEGER PRIMARY KEY REFERENCES meal_plans(id) ON DELETE CASCADE,

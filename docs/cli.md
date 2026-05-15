@@ -8,6 +8,39 @@ with a usage example and notes on failure modes.
 Every command that touches the DB accepts `--db PATH` to target a file
 other than `data/app.db`.
 
+## Run
+
+### `meal-cli start`
+
+Boot the web UI. Initializes the database on first run if it doesn't
+already exist, then hands off to `serve-web`'s bootstrap (migration
+sweep + uvicorn). Recommended entry point for new installs.
+
+```bash
+meal-cli start                                # 127.0.0.1:8000
+meal-cli start --host 0.0.0.0 --port 5000
+meal-cli start --reload                       # dev auto-reload
+meal-cli start --db /var/lib/meal/app.db      # explicit DB path
+```
+
+Bootstrap order:
+1. Resolve the DB path (`--db` / `PANTRY_COOKING_VIBES_DB` / default
+   `data/app.db`).
+2. If the file is missing, print
+   `No database found at <path> — initializing...` and run
+   `init_db()` (apply schema, run migrations, seed canonicals).
+3. Otherwise skip init.
+4. `run_migrations(conn)` against the resolved DB so a stale file
+   self-heals.
+5. Export `PANTRY_COOKING_VIBES_DB`, hand off to `uvicorn.run`.
+
+If `--db` points at a typo'd path, the auto-init step will create a
+new database file there. Watch the printed path before letting
+`start` proceed if you're unsure.
+
+For scripted/CI deployments where a missing DB should be a hard
+failure, use [`serve-web`](#meal-cli-serve-web) instead.
+
 ## Database
 
 ### `meal-cli db-init`
@@ -22,8 +55,9 @@ meal-cli db-init
 ```
 
 Safe to re-run. Idempotent at every level — schema uses `CREATE IF NOT
-EXISTS`, migrations are tracked in `schema_migrations`, and seed uses
-`INSERT OR IGNORE`.
+EXISTS`, migrations are tracked in `schema_migrations` (empty at
+v0.1.0; the prior 001–006 sequence was folded into the baseline
+schema), and seed uses `INSERT OR IGNORE`.
 
 ### `meal-cli db-backup <dest>`
 
@@ -181,7 +215,8 @@ meal-cli apply-text-mappings
 
 ### `meal-cli serve-web`
 
-Start the FastAPI read-mostly UI.
+Start the FastAPI read-mostly UI. Scripted/CI-friendly form of
+[`start`](#meal-cli-start) — requires the DB to already exist.
 
 ```bash
 meal-cli serve-web                                # 127.0.0.1:8000
@@ -191,7 +226,7 @@ meal-cli serve-web --reload                       # dev auto-reload
 
 Bootstrap order:
 1. Verify the DB file exists (exit 1 with "Run 'meal-cli db-init' first"
-   if not).
+   if not). Unlike `start`, no auto-init.
 2. `run_migrations(conn)` — log any applied migrations.
 3. Export `PANTRY_COOKING_VIBES_DB`, hand off to `uvicorn.run`.
 
@@ -202,6 +237,11 @@ Start the MCP server (stdio transport) for Claude Code.
 ```bash
 meal-cli serve-mcp
 ```
+
+**Experimental — hidden from `meal-cli --help`.** The MCP surface
+isn't fully tested in production yet. Command is still callable but
+not listed as a recommended entry point. Will be re-exposed once the
+surface is validated.
 
 Typically wired up in your `.mcp.json` / Claude Code config as an
 external server. See [`docs/mcp.md`](mcp.md).
