@@ -155,6 +155,38 @@ Default-excluded from local `pytest`, but the CI workflow has a dedicated
 Playwright browsers on `uv.lock` hash, and runs `pytest -m e2e` on every
 PR alongside the unit-test matrix.
 
+## Docker image memory regression
+
+`scripts/check_image_memory.py` boots the runtime container, warms a few
+web routes, samples RSS via `docker stats` 10× over ~30s, and fails if
+the max sample exceeds the configured budget (`--max-mb`, default 70).
+Idle observed range across runs is ~46–60 MiB, so 70 MiB gives ~15–30%
+headroom; re-baseline on intentional dep bumps.
+
+```bash
+python scripts/check_image_memory.py                  # build + check
+python scripts/check_image_memory.py --no-build       # reuse local image
+python scripts/check_image_memory.py --max-mb 80 --json mem.json
+```
+
+Exit codes: `0` under budget, `1` over budget, `2` build/boot failure.
+A `[WARN]` line fires when the max sample crosses 85% of the budget.
+
+A pytest wrapper (`tests/e2e/test_image_memory.py`) shells out to the
+script for local repro. It is gated on `DOCKER_MEM_CHECK=1` and a
+`docker` binary on `PATH`, so the e2e suite stays green on machines
+without Docker:
+
+```bash
+DOCKER_MEM_CHECK=1 pytest -m e2e tests/e2e/test_image_memory.py -s
+DOCKER_MEM_MAX_MB=80 DOCKER_MEM_CHECK=1 pytest -m e2e tests/e2e/test_image_memory.py
+```
+
+CI invokes the script directly from `.github/workflows/docker-build.yml`
+after the image build + smoke tests. The job uploads the metrics JSON as
+the `docker-mem-check` artifact and surfaces max / mean / budget in the
+workflow summary.
+
 ## What to test for a new feature
 
 Rough heuristic:
