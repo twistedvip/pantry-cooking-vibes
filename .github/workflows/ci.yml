@@ -38,5 +38,58 @@ jobs:
       - name: Type-check (ty)
         run: uv run --python ${{ matrix.python-version }} ty check src
 
-      - name: Run tests
-        run: uv run --python ${{ matrix.python-version }} pytest -q
+      - name: Run tests (with coverage)
+        run: |
+          uv run --python ${{ matrix.python-version }} pytest -q \
+            --cov=pantry_cooking_vibes \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=json:coverage.json
+
+      - name: Coverage summary (job summary)
+        if: always() && matrix.python-version == '3.13'
+        run: |
+          if [ ! -f coverage.json ]; then
+            echo "coverage.json not found — skipping summary" >&2
+            exit 0
+          fi
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          data = json.load(open("coverage.json"))
+          totals = data["totals"]
+          pct = totals["percent_covered_display"]
+          covered = totals["covered_lines"]
+          missing = totals["missing_lines"]
+          stmts = totals["num_statements"]
+          print(f"## Coverage: **{pct}%**")
+          print()
+          print(f"- Statements: {stmts}")
+          print(f"- Covered: {covered}")
+          print(f"- Missing: {missing}")
+          print()
+          print("### Files with < 80% coverage")
+          print("| File | Coverage | Missing lines |")
+          print("|------|----------|---------------|")
+          files = sorted(
+              data["files"].items(),
+              key=lambda kv: kv[1]["summary"]["percent_covered"],
+          )
+          shown = 0
+          for name, info in files:
+              fpct = info["summary"]["percent_covered"]
+              if fpct >= 80:
+                  continue
+              missing_n = info["summary"]["missing_lines"]
+              print(f"| `{name}` | {fpct:.1f}% | {missing_n} |")
+              shown += 1
+          if shown == 0:
+              print("| _(all files ≥ 80%)_ | | |")
+          PY
+
+      - name: Upload coverage XML artifact
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
