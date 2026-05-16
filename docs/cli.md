@@ -211,6 +211,42 @@ meal-cli apply-text-mappings
 #   rows updated        : 142
 ```
 
+## Deletion
+
+### `meal-cli delete <type> [--id N] [--yes]`
+
+Delete a recipe, meal plan, or pantry item by id, or bulk-delete every
+row of a given type.
+
+`<type>` is one of `recipe`, `plan`, `pantry` (positional, required).
+
+| Flag           | Meaning                                                                              |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `--id N`       | Delete only row `N`. Omit to delete ALL rows of the given type.                      |
+| `--yes` / `-y` | Skip the confirmation prompt (for scripts).                                          |
+
+Examples:
+
+```bash
+meal-cli delete recipe --id 42          # delete recipe 42 (prompts to confirm)
+meal-cli delete plan --id 3 --yes       # delete meal plan 3, no prompt
+meal-cli delete pantry --id 17          # delete pantry row 17
+meal-cli delete recipe                  # delete ALL recipes after count-aware prompt
+meal-cli delete plan --yes              # delete ALL meal plans, no prompt
+```
+
+Cascades follow `ON DELETE CASCADE`:
+
+- `recipe`  → `recipe_ingredients`, `recipe_tags`, `recipe_favorites`, `meal_plan_items`
+- `plan`    → `meal_plan_items`, `shopping_list_items`, `meal_plan_favorites`
+- `pantry`  → no cascade (single-row delete)
+
+Bulk recipe deletes are issued one row at a time so the `recipes_fts`
+index stays in sync via the `recipes_ad` trigger.
+
+Exit `1` if the supplied type is invalid or `--id` references a missing
+row. Confirmation declined returns exit `0`.
+
 ## Servers
 
 ### `meal-cli serve-web`
