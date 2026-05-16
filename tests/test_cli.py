@@ -253,7 +253,6 @@ def test_import_url_recipe_not_found_exits_1(db_path: Path, monkeypatch):
 
 def test_start_initializes_missing_db(tmp_path: Path, monkeypatch):
     """start should call init_db when the db file is absent (auto_init=True)."""
-    import pantry_cooking_vibes.cli as cli_mod
 
     db = tmp_path / "fresh.db"
     captured: dict = {}
@@ -263,7 +262,7 @@ def test_start_initializes_missing_db(tmp_path: Path, monkeypatch):
         captured["kwargs"] = kwargs
 
     monkeypatch.setattr("uvicorn.run", fake_uvicorn_run)
-    res = runner.invoke(cli_mod.app, ["start", "--db", str(db), "--port", "0"])
+    res = runner.invoke(app, ["start", "--db", str(db), "--port", "0"])
     assert res.exit_code == 0, res.output
     assert "No database found" in res.output
     assert "Database initialized" in res.output
