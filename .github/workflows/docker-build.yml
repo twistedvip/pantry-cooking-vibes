@@ -1,0 +1,64 @@
+name: docker-build
+
+# PR-time Docker build verification. Builds the image (no push) on PRs that
+# touch the Dockerfile or anything baked into it, then runs a smoke command
+# inside the resulting image. Catches broken Dockerfile / packaging / entry
+# point issues before a release tag is cut.
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - ".github/workflows/docker-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - ".github/workflows/docker-build.yml"
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build + smoke-test image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (linux/amd64, load into local docker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: pantry-cooking-vibes:pr-${{ github.event.pull_request.number || github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: "Smoke test - meal-cli --help"
+        run: |
+          docker run --rm --entrypoint meal-cli \
+            pantry-cooking-vibes:pr-${{ github.event.pull_request.number || github.sha }} \
+            --help
+
+      - name: "Smoke test - meal-cli db-init"
+        run: |
+          docker run --rm --entrypoint meal-cli \
+            -e PANTRY_COOKING_VIBES_DB=/tmp/smoke.db \
+            pantry-cooking-vibes:pr-${{ github.event.pull_request.number || github.sha }} \
+            db-init --db /tmp/smoke.db
