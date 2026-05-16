@@ -145,8 +145,8 @@ def warmup(base_url: str) -> None:
             try:
                 with urllib.request.urlopen(base_url + p, timeout=5) as r:  # noqa: S310
                     r.read()
-            except urllib.error.URLError:
-                pass
+            except urllib.error.URLError as exc:
+                print(f"[warmup] request failed for {p}: {exc}", file=sys.stderr, flush=True)
 
 
 def _parse_mem_usage(field: str) -> float:
