@@ -150,7 +150,10 @@ pip install -e ".[dev,e2e]"
 playwright install chromium
 ```
 
-Default-excluded; CI without Playwright browsers stays green.
+Default-excluded from local `pytest`, but the CI workflow has a dedicated
+`e2e` job (`.github/workflows/ci.yml`) that installs `[e2e]`, caches the
+Playwright browsers on `uv.lock` hash, and runs `pytest -m e2e` on every
+PR alongside the unit-test matrix.
 
 ## What to test for a new feature
 
