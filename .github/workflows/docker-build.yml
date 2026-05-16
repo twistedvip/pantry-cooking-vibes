@@ -62,3 +62,38 @@ jobs:
             -e PANTRY_COOKING_VIBES_DB=/tmp/smoke.db \
             pantry-cooking-vibes:pr-${{ github.event.pull_request.number || github.sha }} \
             db-init --db /tmp/smoke.db
+
+      - name: "Memory regression check (idle RSS budget)"
+        run: |
+          python scripts/check_image_memory.py \
+            --image pantry-cooking-vibes:pr-${{ github.event.pull_request.number || github.sha }} \
+            --no-build \
+            --max-mb 70 \
+            --json mem-check.json
+
+      - name: "Memory check summary"
+        if: always()
+        run: |
+          if [ ! -f mem-check.json ]; then
+            echo "mem-check.json not produced — skipping summary" >&2
+            exit 0
+          fi
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          data = json.load(open("mem-check.json"))
+          status = "PASS" if data["passed"] else "FAIL"
+          print(f"## Docker image memory: **{status}**")
+          print()
+          print(f"- Max: **{data['max_mb']:.2f} MiB**")
+          print(f"- Mean: {data['mean_mb']:.2f} MiB")
+          print(f"- Budget: {data['budget_mb']:.2f} MiB")
+          print(f"- Samples: {len(data['samples'])}")
+          PY
+
+      - name: "Upload memory check artifact"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-mem-check
+          path: mem-check.json
+          retention-days: 14

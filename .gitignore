@@ -55,3 +55,4 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 .ruff_cache/
+mem-check.json
