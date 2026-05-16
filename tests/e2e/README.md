@@ -26,4 +26,6 @@ pytest -m "e2e or not e2e"
 ```
 
 Default `addopts = "-m 'not e2e'"` in `pyproject.toml` excludes these from the
-normal `pytest` invocation so CI jobs without Playwright browsers still pass.
+normal `pytest` invocation so devs without Playwright browsers installed stay
+green. The `e2e` GitHub Actions job (`.github/workflows/ci.yml`) opts in and
+runs this suite on every PR.
