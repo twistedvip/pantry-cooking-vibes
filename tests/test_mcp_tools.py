@@ -262,6 +262,49 @@ def test_delete_recipe_missing_raises(seeded_db_path):
         tools.delete_recipe(99999, db_path=seeded_db_path)
 
 
+# ---------- delete_meal_plan ----------
+
+
+def test_delete_meal_plan_cascades_items_and_favorites(seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        recipe_id = conn.execute(
+            "SELECT id FROM recipes WHERE name = 'Broccoli Stir Fry'"
+        ).fetchone()["id"]
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-02-01') RETURNING id"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)",
+            (plan_id, recipe_id),
+        )
+        conn.execute("INSERT INTO meal_plan_favorites (plan_id) VALUES (?)", (plan_id,))
+        broccoli_id = conn.execute(
+            "SELECT id FROM canonical_ingredients WHERE name = 'broccoli'"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO shopping_list_items (plan_id, canonical_id, quantity_needed) "
+            "VALUES (?, ?, 1)",
+            (plan_id, broccoli_id),
+        )
+
+    tools.delete_meal_plan(plan_id, db_path=seeded_db_path)
+
+    with connect(seeded_db_path) as conn:
+        assert conn.execute("SELECT 1 FROM meal_plans WHERE id = ?", (plan_id,)).fetchone() is None
+        for table in ("meal_plan_items", "meal_plan_favorites", "shopping_list_items"):
+            n = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE plan_id = ?", (plan_id,)
+            ).fetchone()[0]
+            assert n == 0, f"{table} should cascade-delete"
+        # Recipe survives.
+        assert conn.execute("SELECT 1 FROM recipes WHERE id = ?", (recipe_id,)).fetchone()
+
+
+def test_delete_meal_plan_missing_raises(seeded_db_path):
+    with pytest.raises(ValueError, match="not found"):
+        tools.delete_meal_plan(99999, db_path=seeded_db_path)
+
+
 # ---------- pantry ----------
 
 

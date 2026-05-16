@@ -488,6 +488,119 @@ def reject_mapping_cmd(
     typer.echo(f"rejected queue id {queue_id}")
 
 
+_DELETE_TYPES = ("recipe", "plan", "pantry")
+
+
+def _describe_delete_target(item_type: str, item_id: int, db: Path) -> str | None:
+    """Return a human-readable label for the row, or None if not found."""
+    with connect(db) as conn:
+        if item_type == "recipe":
+            row = conn.execute("SELECT name FROM recipes WHERE id = ?", (item_id,)).fetchone()
+            return f"recipe {item_id} ({row['name']!r})" if row else None
+        if item_type == "plan":
+            row = conn.execute("SELECT week_of FROM meal_plans WHERE id = ?", (item_id,)).fetchone()
+            return f"meal plan {item_id} (week_of {row['week_of']})" if row else None
+        # pantry
+        row = conn.execute(
+            "SELECT ci.name FROM pantry p "
+            "JOIN canonical_ingredients ci ON ci.id = p.canonical_id "
+            "WHERE p.id = ?",
+            (item_id,),
+        ).fetchone()
+        return f"pantry item {item_id} ({row['name']})" if row else None
+
+
+def _delete_one(item_type: str, item_id: int, db: Path, yes: bool) -> None:
+    from pantry_cooking_vibes.mcp_server import tools
+
+    label = _describe_delete_target(item_type, item_id, db)
+    if label is None:
+        typer.echo(f"{item_type} {item_id} not found", err=True)
+        raise typer.Exit(1)
+
+    if not yes and not typer.confirm(f"Delete {label}?", default=False):
+        typer.echo("aborted")
+        raise typer.Exit(0)
+
+    if item_type == "recipe":
+        tools.delete_recipe(item_id, db_path=db)
+    elif item_type == "plan":
+        tools.delete_meal_plan(item_id, db_path=db)
+    else:  # pantry
+        tools.remove_pantry_item(item_id, db_path=db)
+    typer.echo(f"deleted {label}")
+
+
+def _delete_all(item_type: str, db: Path, yes: bool) -> None:
+    table = {"recipe": "recipes", "plan": "meal_plans", "pantry": "pantry"}[item_type]
+    with connect(db) as conn:
+        count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
+
+    if count == 0:
+        typer.echo(f"no {item_type} rows to delete")
+        return
+
+    if not yes and not typer.confirm(
+        f"Delete ALL {count} {item_type} row(s)? This cannot be undone.",
+        default=False,
+    ):
+        typer.echo("aborted")
+        raise typer.Exit(0)
+
+    with connect(db) as conn:
+        if item_type == "recipe":
+            # Row-level deletes keep recipes_fts in sync via the recipes_ad trigger.
+            ids = [r["id"] for r in conn.execute("SELECT id FROM recipes")]
+            for rid in ids:
+                conn.execute("DELETE FROM recipes WHERE id = ?", (rid,))
+        else:
+            conn.execute(f"DELETE FROM {table}")  # noqa: S608
+    typer.echo(f"deleted {count} {item_type} row(s)")
+
+
+@app.command("delete", rich_help_panel=_PANEL_CURATION)
+def delete_cmd(
+    item_type: str = typer.Argument(
+        ...,
+        metavar="TYPE",
+        help=f"Item type. One of: {', '.join(_DELETE_TYPES)}.",
+    ),
+    id: int = typer.Option(
+        None,
+        "--id",
+        help="Specific item id. Omit to delete ALL items of the given type.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip the confirmation prompt.",
+    ),
+    db: Path = typer.Option(
+        DB_PATH,
+        envvar="PANTRY_COOKING_VIBES_DB",
+        help="Path to SQLite database file (env: PANTRY_COOKING_VIBES_DB)",
+    ),
+) -> None:
+    """Delete a recipe, meal plan, or pantry item.
+
+    With ``--id`` deletes that single row. Without ``--id`` deletes ALL rows
+    of the given type (count-aware confirmation). Use ``--yes`` to skip
+    prompts in scripts. Cascades follow ON DELETE CASCADE foreign keys.
+    """
+    if item_type not in _DELETE_TYPES:
+        typer.echo(
+            f"invalid type {item_type!r}; choose: {', '.join(_DELETE_TYPES)}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    if id is not None:
+        _delete_one(item_type, id, db, yes)
+    else:
+        _delete_all(item_type, db, yes)
+
+
 @app.command("apply-text-mappings", rich_help_panel=_PANEL_CURATION)
 def apply_text_mappings_cmd(
     db: Path = typer.Option(

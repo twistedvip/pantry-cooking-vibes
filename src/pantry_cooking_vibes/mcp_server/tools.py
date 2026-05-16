@@ -736,6 +736,20 @@ def get_meal_plan(plan_id: int, *, db_path: Path | None = None) -> dict | None:
     return plan
 
 
+def delete_meal_plan(plan_id: int, *, db_path: Path | None = None) -> None:
+    """Delete a meal plan by id.
+
+    Cascades to ``meal_plan_items``, ``shopping_list_items``, and
+    ``meal_plan_favorites`` via ``ON DELETE CASCADE``. Raises ``ValueError``
+    if the plan doesn't exist.
+    """
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        cur = conn.execute("DELETE FROM meal_plans WHERE id = ?", (int(plan_id),))
+        if cur.rowcount == 0:
+            raise ValueError(f"meal plan {plan_id} not found")
+
+
 # ---------- Shopping list (qualitative v1) ----------
 
 
