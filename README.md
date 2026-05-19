@@ -4,6 +4,12 @@
 
 # Pantry Cooking Vibes
 
+**Tests**
+
+[![CI](https://github.com/twistedvip/pantry-cooking-vibes/actions/workflows/ci.yml/badge.svg)](https://github.com/twistedvip/pantry-cooking-vibes/actions/workflows/ci.yml)
+
+---
+
 Local, single-user meal-planning system where Claude acts as the planning
 intelligence. A single SQLite database is the source of truth; a CLI, a
 read-mostly FastAPI UI, and an MCP server for Claude Code all read and write

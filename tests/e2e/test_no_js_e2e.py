@@ -46,17 +46,13 @@ _ON_RE = re.compile(r"\bon\b")
 def _toggle_and_wait(page) -> None:
     """Click chicken's fav button and wait for the post-redirect page to settle.
 
-    With JS disabled, the form does a synchronous POST → 303 → GET. Playwright's
-    auto-wait on Locator.click times out racing the in-flight nav, so we drive
-    nav explicitly: capture the redirect Location, wait for that exact URL.
+    With JS disabled the form does POST → 303 → GET; redirect_to lands on the
+    same URL, so URL-watchers (expect_navigation, wait_for_url) never fire.
+    Wait on the POST response itself, then settle the document.
     """
-    btn = _chicken_fav_btn(page)
-    with page.expect_response(re.compile(r"/recipes/\d+/favorite")) as ri:
-        btn.click(no_wait_after=True)
-    redirect_to = ri.value.headers.get("location", "")
-    if redirect_to.startswith("/"):
-        page.wait_for_url(f"**{redirect_to}", timeout=10000)
-    page.wait_for_load_state("domcontentloaded")
+    with page.expect_response(re.compile(r"/recipes/\d+/favorite")):
+        _chicken_fav_btn(page).click()
+    page.wait_for_load_state("networkidle")
 
 
 def test_favorite_toggle_works_with_js_disabled(live_server, browser):
