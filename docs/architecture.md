@@ -1,32 +1,8 @@
 # Architecture
 
-## Components
-
-```
-                       +-----------------------+
-                       |  data/app.db (SQLite) |
-                       +-----------+-----------+
-                                   ^
-            read/write             |             read/write
-        +----------+----------+----+------+----+----------+
-        |          |          |           |    |          |
-        | pantry_cooking_vibes.cli  |  mcp_server.tools (pure) |
-        |    (Typer CLI)      |                           |
-        |          |          +---------+-----------------+
-        |          |                    ^
-        |          v                    |
-        |   importers.*            web.routes.*  <-- Jinja2Templates
-        |   (jsonl_ingest /        (FastAPI app)
-        |    url_import /              ^
-        |    normalize /               |
-        |    registry)            mcp_server.server
-        |                         (FastMCP stdio)
-        +------------------------------+
-```
-
-Every component talks to the same SQLite file via
-`pantry_cooking_vibes.db.connect`. The only coupling between components is
-shared table shape — no RPC, no shared process.
+<p align="center">
+   <img src="images/pantry-cooking-vibes-arch.png" alt="Architecture" width="750"/>
+</p>
 
 ## Layering rules
 
@@ -43,6 +19,10 @@ shared table shape — no RPC, no shared process.
 4. **`importers/` and `cli.py` are operational.** Importers transform external
    inputs (JSONL files, URLs) into rows the app layer reads; the CLI is the
    user-facing wrapper. Neither is imported by the web or MCP paths.
+
+Every component talks to the same SQLite file via
+`pantry_cooking_vibes.db.connect`. The only coupling between components is
+shared table shape — no RPC, no shared process.
 
 The rule of thumb: if a new feature needs SQL, add it to `tools.py` first and
 call that from both `web/routes/` and `mcp_server/server.py`. Don't split the
