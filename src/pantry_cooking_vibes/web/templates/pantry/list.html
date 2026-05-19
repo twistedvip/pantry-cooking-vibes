@@ -35,7 +35,14 @@
         <span class="canonical-name">{{ s.name }}</span>
         {% if s.category %}<span class="category">{{ s.category }}</span>{% endif %}
         <label>qty <input type="number" name="quantity" step="0.01" min="0" value="1" required></label>
-        <label>unit <input type="text" name="unit" value="{{ s.default_unit or '' }}" placeholder="lb, cup, count"></label>
+        <label>unit
+          {% set sel = s.default_unit or '' %}
+          <select name="unit">
+            <option value=""{% if not sel %} selected{% endif %}>—</option>
+            {% if sel and sel not in s.unit_options %}<option value="{{ sel }}" selected>{{ sel }}</option>{% endif %}
+            {% for u in s.unit_options %}<option value="{{ u }}"{% if u == sel %} selected{% endif %}>{{ u }}</option>{% endfor %}
+          </select>
+        </label>
         <label>expires <input type="date" name="expires_at" value="{{ s.suggested_expires_at }}"{% if s.suggested_expires_at %} title="suggested: {{ s.freshness_days }} days"{% endif %}></label>
         <label>note <input type="text" name="note" placeholder="optional"></label>
         <button type="submit" class="primary">Add</button>
@@ -66,7 +73,12 @@
           <span class="name">{{ p.canonical_name }}</span>
           <form class="edit-form" method="post" action="/pantry/{{ p.id }}/update">
             <input type="number" name="quantity" step="0.01" min="0" value="{{ p.quantity }}" required aria-label="quantity">
-            <input type="text" name="unit" value="{{ p.unit or '' }}" placeholder="unit" aria-label="unit">
+            {% set cur = p.unit or '' %}
+            <select name="unit" aria-label="unit">
+              <option value=""{% if not cur %} selected{% endif %}>—</option>
+              {% if cur and cur not in p.unit_options %}<option value="{{ cur }}" selected>{{ cur }}</option>{% endif %}
+              {% for u in p.unit_options %}<option value="{{ u }}"{% if u == cur %} selected{% endif %}>{{ u }}</option>{% endfor %}
+            </select>
             <button type="submit" class="btn-save">Save</button>
           </form>
           {% if p.expires_at %}<span class="qty">exp {{ p.expires_at }}</span>{% endif %}

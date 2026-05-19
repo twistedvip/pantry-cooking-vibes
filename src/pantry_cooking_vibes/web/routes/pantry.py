@@ -13,6 +13,57 @@ from pantry_cooking_vibes.web.deps import get_db_path, render, url_quote as _q
 
 router = APIRouter(prefix="/pantry")
 
+# Unit options scoped per canonical category so the dropdown shows only
+# measurements that make sense for the ingredient (e.g. proteins by weight,
+# spices by spoon). Free text retired in favor of <select> to stop
+# typo-driven divergence (e.g. "tbs" vs "tbsp"). Categories mirror
+# canonical_seed.csv. Order within each tuple = display order.
+UNIT_OPTIONS_BY_CATEGORY: dict[str, tuple[str, ...]] = {
+    "protein": ("oz", "lb", "g", "kg", "slice", "link", "whole", "count"),
+    "vegetable": (
+        "whole",
+        "cup",
+        "oz",
+        "lb",
+        "g",
+        "head",
+        "bulb",
+        "stalk",
+        "spear",
+        "ear",
+        "clove",
+        "leaf",
+    ),
+    "fruit": ("whole", "cup", "oz", "lb", "g"),
+    "grain": ("cup", "oz", "lb", "g", "slice", "whole"),
+    "dairy": ("cup", "oz", "lb", "g", "tbsp", "tsp", "slice", "ml", "l"),
+    "legume": ("cup", "oz", "lb", "g", "tbsp"),
+    "nut": ("oz", "lb", "g", "cup", "tbsp"),
+    "seed": ("tbsp", "tsp", "oz", "g", "cup"),
+    "fat": ("tbsp", "tsp", "cup", "ml", "l", "fl oz"),
+    "herb": ("sprig", "leaf", "stalk", "cup", "tbsp", "tsp"),
+    "spice": ("tsp", "tbsp", "pinch", "whole"),
+    "condiment": ("tbsp", "tsp", "cup", "ml", "l", "fl oz"),
+    "baking": ("cup", "tbsp", "tsp", "oz", "lb", "g", "whole"),
+    "beverage": ("cup", "fl oz", "ml", "l", "pint", "quart", "gallon"),
+}
+# Catch-all for canonicals with NULL/unknown category. Kept short.
+DEFAULT_UNIT_OPTIONS: tuple[str, ...] = (
+    "count",
+    "cup",
+    "g",
+    "kg",
+    "lb",
+    "oz",
+    "tbsp",
+    "tsp",
+    "whole",
+)
+
+
+def _units_for(category: str | None) -> tuple[str, ...]:
+    return UNIT_OPTIONS_BY_CATEGORY.get((category or "").lower(), DEFAULT_UNIT_OPTIONS)
+
 
 @router.get("")
 def pantry_page(
@@ -25,6 +76,8 @@ def pantry_page(
     db_path: Path = Depends(get_db_path),
 ) -> object:
     items = tools.list_pantry(db_path=db_path)
+    for p in items:
+        p["unit_options"] = _units_for(p.get("category"))
     suggestions = (
         tools.find_canonical_ingredient(search, limit=20, db_path=db_path) if search.strip() else []
     )
@@ -32,6 +85,7 @@ def pantry_page(
     for s in suggestions:
         fd = s.get("freshness_days")
         s["suggested_expires_at"] = (today + timedelta(days=fd)).isoformat() if fd else ""
+        s["unit_options"] = _units_for(s.get("category"))
     return render(
         request,
         "pantry/list.html",

@@ -23,7 +23,7 @@ def test_pantry_add_then_remove_round_trips(live_server, page):
     assert suggestion.count() == 1, "expected exactly one 'salt' suggestion form"
 
     suggestion.locator('input[name="quantity"]').fill("3")
-    suggestion.locator('input[name="unit"]').fill("tsp")
+    suggestion.locator('select[name="unit"]').select_option("tsp")
     suggestion.locator('button[type="submit"]').click()
     page.wait_for_load_state("networkidle")
 
