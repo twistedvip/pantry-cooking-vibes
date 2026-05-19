@@ -29,7 +29,7 @@ def test_pantry_update_changes_quantity_and_unit(live_server, page, e2e_db):
     row = page.locator(".pantry-item").filter(has_text="olive oil").first
     edit = row.locator("form.edit-form")
     edit.locator('input[name="quantity"]').fill("2.5")
-    edit.locator('input[name="unit"]').fill("liter")
+    edit.locator('select[name="unit"]').select_option("ml")
     edit.locator('button[type="submit"]').click()
     page.wait_for_load_state("networkidle")
 
@@ -41,7 +41,7 @@ def test_pantry_update_changes_quantity_and_unit(live_server, page, e2e_db):
             "SELECT quantity, unit FROM pantry WHERE id = ?", (item_id,)
         ).fetchone()
     assert float(row_db["quantity"]) == pytest.approx(2.5)
-    assert row_db["unit"] == "liter"
+    assert row_db["unit"] == "ml"
 
     # Restore so downstream tests still see the original 'bottle' state.
     page.request.post(
