@@ -2,3 +2,7 @@
 	path = scrapers/pantry-cooking-vibes-hungryroot
 	url = https://github.com/twistedvip/pantry-cooking-vibes-hungryroot
 	branch = main
+[submodule "pantry-cooking-vibes-hellofresh"]
+	path = scrapers/pantry-cooking-vibes-hellofresh
+	url = https://github.com/twistedvip/pantry-cooking-vibes-hellofresh
+	branch = main
