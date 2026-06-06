@@ -28,6 +28,23 @@ coerced in `_parse_optional_int` — FastAPI's `Optional[int]` rejects `""`
 with a 422, so the route accepts `str` and parses it. Non-numeric values
 still raise 422.
 
+### Ingredient-match mode (`?match_plan=N&sort=match`)
+
+When `sort=match` and `match_plan=N` reference an existing plan, `/recipes`
+ranks candidates by `tools.suggest_recipes_for_plan` instead of the normal
+search: each card shows a `% match` chip = `|recipe ∩ (plan ∪ pantry)| /
+|recipe mapped ingredients|` (100% = nothing new to buy) plus an "N new to
+buy" count and a "+ Add to plan" button that POSTs to
+`/recipes/{id}/add-to-current-week` for the plan's week and redirects back to
+the same match URL. Recipes already in the plan are excluded; recipes with no
+mapped ingredients show "—" and sort last. The standard filters (`q`,
+`max_time`, `tags`, `sources`, `fav`) still compose. A missing/invalid
+`match_plan` silently falls back to a normal search so stale links never 500.
+The entry point is the "+ Find matching meals" button on `/plans/{id}`, shown
+once a plan has at least one recipe. Candidate pool is capped (see
+`SUGGEST_CANDIDATE_POOL`); BACKLOG Issue #53 tracks the SQL upgrade to remove
+the cap.
+
 ## App factory
 
 ```python

@@ -20,6 +20,12 @@ log = logging.getLogger(__name__)
 
 DEFAULT_RESULT_LIMIT = 20
 MAX_RESULT_LIMIT = 250
+# Candidate pool for plan ingredient-match ranking (Issue #53). Default is
+# higher than MAX_RESULT_LIMIT so ranking sees more recipes than a normal page;
+# MAX_SUGGEST_CANDIDATES caps it. See BACKLOG for the SQL upgrade that removes
+# the cap entirely.
+SUGGEST_CANDIDATE_POOL = 500
+MAX_SUGGEST_CANDIDATES = 1000
 _DAY_VALUES = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 _MEAL_SLOT_VALUES = {"breakfast", "lunch", "dinner"}
 _WEEK_OF_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -29,8 +35,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return dict(row)
 
 
-def _clamp_limit(limit: int) -> int:
-    return max(1, min(int(limit), MAX_RESULT_LIMIT))
+def _clamp_limit(limit: int, max_limit: int = MAX_RESULT_LIMIT) -> int:
+    return max(1, min(int(limit), int(max_limit)))
 
 
 # ---------- Recipe search & detail ----------
@@ -103,6 +109,7 @@ def search_recipes(
     pantry_only: bool = False,
     *,
     db_path: Path | None = None,
+    _max_limit: int = MAX_RESULT_LIMIT,
 ) -> list[dict]:
     """Search recipes via FTS5 + cooking-time + tag + source filters.
 
@@ -113,9 +120,13 @@ def search_recipes(
     ``ingredient_mode='and'`` requires all of them; ``'or'`` requires any.
     ``pantry_only=True`` further restricts to recipes whose mapped ingredients
     are all present in the pantry (unmapped ingredients are ignored).
+
+    ``_max_limit`` raises the internal clamp ceiling for callers that need a
+    larger candidate pool than the public ``MAX_RESULT_LIMIT`` (e.g.
+    ``suggest_recipes_for_plan``). Private — not part of the MCP/web contract.
     """
     db = db_path or DB_PATH
-    limit = _clamp_limit(limit)
+    limit = _clamp_limit(limit, _max_limit)
     if ingredient_mode not in ("and", "or"):
         raise ValueError("ingredient_mode must be 'and' or 'or'")
     params: list[Any] = []
@@ -748,6 +759,125 @@ def delete_meal_plan(plan_id: int, *, db_path: Path | None = None) -> None:
         cur = conn.execute("DELETE FROM meal_plans WHERE id = ?", (int(plan_id),))
         if cur.rowcount == 0:
             raise ValueError(f"meal plan {plan_id} not found")
+
+
+# ---------- Plan ingredient-match suggestions (Issue #53) ----------
+
+
+def _plan_pantry_have_ids(conn: sqlite3.Connection, plan_id: int) -> set[int]:
+    """Canonical ids the user already has for a plan: plan recipes' ingredients ∪ pantry.
+
+    These are the ingredients a new recipe would *not* add to the shopping list.
+    Caller owns the connection.
+    """
+    have = {
+        r["canonical_id"]
+        for r in conn.execute(
+            "SELECT DISTINCT ri.canonical_id "
+            "FROM meal_plan_items mpi "
+            "JOIN recipe_ingredients ri ON ri.recipe_id = mpi.recipe_id "
+            "WHERE mpi.plan_id = ? AND ri.canonical_id IS NOT NULL",
+            (int(plan_id),),
+        ).fetchall()
+    }
+    have |= {
+        r["canonical_id"]
+        for r in conn.execute("SELECT DISTINCT canonical_id FROM pantry").fetchall()
+    }
+    return have
+
+
+def suggest_recipes_for_plan(
+    plan_id: int,
+    query: str = "",
+    max_time_min: int | None = None,
+    tags: list[str] | None = None,
+    sources: list[str] | None = None,
+    favorites_only: bool = False,
+    limit: int = DEFAULT_RESULT_LIMIT,
+    candidate_pool: int = SUGGEST_CANDIDATE_POOL,
+    *,
+    db_path: Path | None = None,
+) -> list[dict]:
+    """Rank recipes by how much of each overlaps what you already have for a plan.
+
+    "Have" = canonical ingredients from the plan's existing recipes ∪ pantry.
+    Score per candidate = ``|candidate ∩ have| / |candidate mapped ingredients|``,
+    i.e. the fraction of the recipe you wouldn't need to buy. Recipes already in
+    the plan are excluded. Recipes with no mapped ingredients get
+    ``match_percent=None`` and sort last (overlap is undefined for them).
+
+    Candidates come from :func:`search_recipes` (same name/time/tag/source/
+    favorite filters), capped at ``candidate_pool`` *before* scoring — so ranking
+    sees the top-N filtered recipes, not the whole catalog. See ``BACKLOG.md``
+    (Issue #53) for the SQL-side upgrade that removes this cap. Returns up to
+    ``limit`` rows, each augmented with ``match_percent`` (int 0-100 or ``None``),
+    ``match_have``, ``match_total``, and ``new_count``.
+
+    Raises ``ValueError`` if the plan does not exist.
+    """
+    db = db_path or DB_PATH
+    limit = _clamp_limit(limit)
+    pool = _clamp_limit(candidate_pool, MAX_SUGGEST_CANDIDATES)
+    with connect(db) as conn:
+        exists = conn.execute("SELECT 1 FROM meal_plans WHERE id = ?", (int(plan_id),)).fetchone()
+        if exists is None:
+            raise ValueError(f"meal plan {plan_id} not found")
+        have_ids = _plan_pantry_have_ids(conn, plan_id)
+        in_plan = {
+            r["recipe_id"]
+            for r in conn.execute(
+                "SELECT DISTINCT recipe_id FROM meal_plan_items WHERE plan_id = ?",
+                (int(plan_id),),
+            ).fetchall()
+        }
+
+    # Reuse search_recipes unchanged (don't fork filter SQL); score its output.
+    candidates = search_recipes(
+        query=query,
+        max_time_min=max_time_min,
+        tags=tags,
+        limit=pool,
+        favorites_only=favorites_only,
+        sources=sources,
+        db_path=db,
+        _max_limit=MAX_SUGGEST_CANDIDATES,
+    )
+    candidates = [c for c in candidates if c["id"] not in in_plan]
+    if not candidates:
+        return []
+
+    cand_ids = [c["id"] for c in candidates]
+    with connect(db) as conn:
+        placeholders = ",".join("?" * len(cand_ids))
+        rows = conn.execute(
+            f"SELECT recipe_id, canonical_id FROM recipe_ingredients "  # noqa: S608
+            f"WHERE recipe_id IN ({placeholders}) AND canonical_id IS NOT NULL",
+            cand_ids,
+        ).fetchall()
+    mapped: dict[int, set[int]] = {}
+    for r in rows:
+        mapped.setdefault(r["recipe_id"], set()).add(r["canonical_id"])
+
+    for c in candidates:
+        ing = mapped.get(c["id"], set())
+        total = len(ing)
+        have = len(ing & have_ids)
+        c["match_total"] = total
+        c["match_have"] = have
+        c["new_count"] = total - have
+        c["match_percent"] = int(round(100 * have / total)) if total else None
+
+    candidates.sort(
+        key=lambda c: (
+            c["match_percent"] is None,  # recipes with a defined % come first
+            -(c["match_percent"] or 0),  # higher overlap % first
+            -c["match_have"],  # more shared ingredients first
+            -(c["rating"] or 0.0),  # better-rated first
+            c["name"],  # stable final tiebreak
+        )
+    )
+    return candidates[:limit]
 
 
 # ---------- Shopping list (qualitative v1) ----------

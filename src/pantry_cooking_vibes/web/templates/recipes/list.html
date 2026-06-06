@@ -5,8 +5,20 @@
 <h1>Recipes</h1>
 <p class="screen-sub">Filter the catalog — narrow by name, cook time, or tag.</p>
 
+{% if match_plan %}
+<div class="match-banner note mt-12">
+  <span>Matching meals for <a href="/plans/{{ match_plan.id }}">plan — week of {{ match_plan.week_of }}</a>,
+  ranked by how much you already have. <strong>100% = buy nothing new.</strong></span>
+  <a class="btn btn-reset" href="/recipes">Exit match mode</a>
+</div>
+{% endif %}
+
 <div class="browser-layout">
   <form class="filter-rail" method="get" action="/recipes">
+    {% if match_plan %}
+    <input type="hidden" name="match_plan" value="{{ match_plan.id }}">
+    <input type="hidden" name="sort" value="match">
+    {% endif %}
     <div class="rail-group">
       <span class="label">search</span>
       <input type="text" name="q" value="{{ q }}" placeholder="broccoli stir fry…">
@@ -68,7 +80,7 @@
     {% if recipes %}
     <div class="toolbar">
       <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}.</p>
-      <span class="label">sorted by best match</span>
+      <span class="label">{{ 'sorted by ingredient match' if match_plan else 'sorted by best match' }}</span>
     </div>
     <ul class="recipe-grid">
       {% for r in recipes %}
@@ -90,6 +102,16 @@
           {% endif %}
           <div class="recipe-body">
             <h3>{{ r.name }}</h3>
+            {% if match_plan %}
+            <div class="match-line">
+              {% if r.match_percent is not none %}
+              <span class="coverage-chip chip acc">{{ r.match_percent }}% match</span>
+              <span class="label">{{ r.new_count }} new to buy</span>
+              {% else %}
+              <span class="chip">— no mapped ingredients</span>
+              {% endif %}
+            </div>
+            {% endif %}
             <div class="meta">
               {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
               {% if r.servings %}<span>🍽 {{ r.servings }} servings</span>{% endif %}
@@ -98,6 +120,13 @@
             </div>
           </div>
         </a>
+        {% if match_plan %}
+        <form method="post" action="/recipes/{{ r.id }}/add-to-current-week" class="match-add">
+          <input type="hidden" name="week_of" value="{{ match_plan.week_of }}">
+          <input type="hidden" name="redirect_to" value="{{ request.url.path }}?{{ request.url.query }}">
+          <button type="submit" class="btn primary">+ Add to plan</button>
+        </form>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>

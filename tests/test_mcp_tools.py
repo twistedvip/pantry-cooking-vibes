@@ -830,3 +830,127 @@ def test_add_to_current_week_plan_concurrent(seeded_db_path):
         ).fetchone()[0]
     assert plan_count == 1
     assert item_count == 2
+
+
+# ---------- suggest_recipes_for_plan (Issue #53) ----------
+
+
+def _recipe_id(db_path, name: str) -> int:
+    with connect(db_path) as conn:
+        return conn.execute("SELECT id FROM recipes WHERE name = ?", (name,)).fetchone()["id"]
+
+
+def _plan_with(db_path, recipe_names: list[str], week_of: str = "2025-01-05") -> int:
+    """Create a draft plan containing the named recipes; return plan_id."""
+    plan = tools.create_meal_plan(week_of, db_path=db_path)
+    for name in recipe_names:
+        tools.add_recipe_to_plan(plan["id"], _recipe_id(db_path, name), db_path=db_path)
+    return plan["id"]
+
+
+def test_suggest_missing_plan_raises(seeded_db_path):
+    with pytest.raises(ValueError, match="not found"):
+        tools.suggest_recipes_for_plan(9999, db_path=seeded_db_path)
+
+
+def test_suggest_excludes_recipes_already_in_plan(seeded_db_path):
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    names = {r["name"] for r in results}
+    assert "Broccoli Stir Fry" not in names
+    assert "Broccoli Soup" in names
+
+
+def test_suggest_percent_uses_plan_pantry_union(seeded_db_path):
+    # Plan has Stir Fry (broccoli + other); pantry has broccoli.
+    # have-set = {broccoli, other}. Candidate Soup maps only {broccoli}:
+    # 1/1 covered -> 100%, 0 new.
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    soup = next(r for r in results if r["name"] == "Broccoli Soup")
+    assert soup["match_total"] == 1
+    assert soup["match_have"] == 1
+    assert soup["new_count"] == 0
+    assert soup["match_percent"] == 100
+
+
+def test_suggest_partial_percent(seeded_db_path):
+    # Plan has Soup (broccoli); pantry has broccoli. have-set = {broccoli}.
+    # Candidate Stir Fry maps {broccoli, other}: 1 of 2 covered -> 50%, 1 new.
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Soup"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    stir = next(r for r in results if r["name"] == "Broccoli Stir Fry")
+    assert stir["match_total"] == 2
+    assert stir["match_have"] == 1
+    assert stir["new_count"] == 1
+    assert stir["match_percent"] == 50
+
+
+def test_suggest_unmapped_only_recipe_sorts_last_with_none_percent(seeded_db_path):
+    # A recipe whose ingredients are all unmapped has an undefined overlap.
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute(
+            "INSERT INTO recipes (source, source_id, name, instructions_md, rating) "
+            "VALUES ('manual', 'mystery', 'Mystery Dish', 'Mix it.', 5.0) RETURNING id"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO recipe_ingredients (recipe_id, canonical_id, original_text) "
+            "VALUES (?, NULL, 'a pinch of mystery')",
+            (rid,),
+        )
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    mystery = next(r for r in results if r["name"] == "Mystery Dish")
+    assert mystery["match_percent"] is None
+    assert mystery["match_total"] == 0
+    # None-percent recipes sort to the very end.
+    assert results[-1]["name"] == "Mystery Dish"
+
+
+def test_suggest_sorted_by_percent_desc(seeded_db_path):
+    # Add a third recipe sharing nothing with the plan/pantry so it ranks lower.
+    with connect(seeded_db_path) as conn:
+        carrot_id = conn.execute(
+            "SELECT id FROM canonical_ingredients WHERE name = 'carrot'"
+        ).fetchone()
+        # Fall back to any non-broccoli canonical if 'carrot' isn't seeded.
+        if carrot_id is None:
+            carrot_id = conn.execute(
+                "SELECT id FROM canonical_ingredients WHERE name NOT IN ('broccoli') "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        carrot_id = carrot_id["id"]
+        rid = conn.execute(
+            "INSERT INTO recipes (source, source_id, name, instructions_md, rating) "
+            "VALUES ('manual', 'carrotcake', 'Carrot Thing', 'Bake.', 4.0) RETURNING id"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO recipe_ingredients (recipe_id, canonical_id, original_text) "
+            "VALUES (?, ?, 'carrots')",
+            (rid, carrot_id),
+        )
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    percents = [r["match_percent"] for r in results if r["match_percent"] is not None]
+    assert percents == sorted(percents, reverse=True)
+
+
+def test_suggest_respects_filters(seeded_db_path):
+    # tag filter should narrow candidates just like search_recipes.
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, tags=["soup"], db_path=seeded_db_path)
+    names = {r["name"] for r in results}
+    assert names == {"Broccoli Soup"}
+
+
+def test_suggest_empty_when_no_other_recipes(seeded_db_path):
+    # Plan holds every recipe -> no candidates left.
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry", "Broccoli Soup"])
+    results = tools.suggest_recipes_for_plan(plan_id, db_path=seeded_db_path)
+    assert results == []
+
+
+def test_suggest_limit_truncates(seeded_db_path):
+    plan_id = _plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    results = tools.suggest_recipes_for_plan(plan_id, limit=1, db_path=seeded_db_path)
+    assert len(results) <= 1

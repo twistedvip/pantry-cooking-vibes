@@ -25,6 +25,9 @@
     <form method="post" action="/plans/{{ plan.id }}/clone" style="display:inline">
       <button type="submit" class="btn ghost">Clone</button>
     </form>
+    {% if plan['items'] %}
+    <a class="btn ghost" href="/recipes?match_plan={{ plan.id }}&sort=match">+ Find matching meals</a>
+    {% endif %}
     <a class="btn btn-link" href="/plans/{{ plan.id }}/print">Print</a>
     <a class="btn primary" href="/plans/{{ plan.id }}/shopping">Shopping list →</a>
   </div>

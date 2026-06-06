@@ -62,6 +62,10 @@ def list_recipes(
     pantry_only: str = Query(
         "", description="Set to 1 to show only recipes whose mapped ingredients are all in pantry"
     ),
+    match_plan: str = Query(
+        "", description="Plan id to rank candidates against by ingredient overlap"
+    ),
+    sort: str = Query("", description="'match' ranks by ingredient overlap with match_plan"),
     db_path: Path = Depends(get_db_path),
 ) -> object:
     max_time_val = _parse_optional_int(max_time, "max_time", min_value=0)
@@ -70,28 +74,49 @@ def list_recipes(
     favorites_only = fav == "1"
     pantry_only_val = pantry_only == "1"
     mode = ingredient_mode if ingredient_mode in ("and", "or") else "and"
+    match_plan_id = _parse_optional_int(match_plan, "match_plan", min_value=1)
 
     available_sources = tools.list_recipe_sources(db_path=db_path)
     selected_sources = [s for s in sources if s in available_sources]
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     ingredient_list = [i.strip() for i in ingredients.split(",") if i.strip()]
+
+    # Match mode: rank candidates by ingredient overlap with an existing plan.
+    # A missing/invalid plan falls back to a normal search so a stale link
+    # never 500s the page.
+    match_plan_obj = None
+    if sort == "match" and match_plan_id is not None:
+        match_plan_obj = tools.get_meal_plan(match_plan_id, db_path=db_path)
+
     # search_recipes sanitizes the FTS5 query, but DB-level errors at the
     # boundary (corrupt index, locked file, bad migration) shouldn't 500 the
     # whole page — log them, render an empty result so the UI stays usable.
     try:
-        results = tools.search_recipes(
-            query=q,
-            max_time_min=max_time_val,
-            tags=tag_list or None,
-            limit=limit_val,
-            favorites_only=favorites_only,
-            sources=selected_sources or None,
-            ingredients=ingredient_list or None,
-            ingredient_mode=mode,
-            pantry_only=pantry_only_val,
-            db_path=db_path,
-        )
+        if match_plan_obj is not None and match_plan_id is not None:
+            results = tools.suggest_recipes_for_plan(
+                match_plan_id,
+                query=q,
+                max_time_min=max_time_val,
+                tags=tag_list or None,
+                sources=selected_sources or None,
+                favorites_only=favorites_only,
+                limit=limit_val,
+                db_path=db_path,
+            )
+        else:
+            results = tools.search_recipes(
+                query=q,
+                max_time_min=max_time_val,
+                tags=tag_list or None,
+                limit=limit_val,
+                favorites_only=favorites_only,
+                sources=selected_sources or None,
+                ingredients=ingredient_list or None,
+                ingredient_mode=mode,
+                pantry_only=pantry_only_val,
+                db_path=db_path,
+            )
     except sqlite3.OperationalError:
         # Strip CR/LF before logging so a crafted ?q= / ?tags= can't forge log
         # lines (CWE-117). The "\r\n" and "\n" replace calls are also what
@@ -116,6 +141,7 @@ def list_recipes(
             "ingredients": ",".join(ingredient_list),
             "ingredient_mode": mode,
             "pantry_only": pantry_only_val,
+            "match_plan": match_plan_obj,
         },
     )
 

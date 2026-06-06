@@ -1377,3 +1377,82 @@ def test_referrer_policy_does_not_strip_origin_on_same_origin_posts():
         "no-referrer causes Chrome to null the Origin header on same-origin "
         "form POSTs — use same-origin or strict-origin-when-cross-origin"
     )
+
+
+# ---------- ingredient-match search (Issue #53) ----------
+
+
+def _make_plan_with(db_path, recipe_names, week_of="2025-01-05"):
+    """Create a draft plan containing the named recipes; return (plan_id, week_of)."""
+    from pantry_cooking_vibes.mcp_server import tools
+
+    plan = tools.create_meal_plan(week_of, db_path=db_path)
+    for name in recipe_names:
+        with connect(db_path) as conn:
+            rid = conn.execute("SELECT id FROM recipes WHERE name = ?", (name,)).fetchone()["id"]
+        tools.add_recipe_to_plan(plan["id"], rid, db_path=db_path)
+    return plan["id"], week_of
+
+
+def test_match_mode_renders_banner_and_chips(client: TestClient, seeded_db_path):
+    plan_id, _ = _make_plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    r = client.get(f"/recipes?match_plan={plan_id}&sort=match")
+    assert r.status_code == 200
+    body = r.text
+    assert "Matching meals for" in body
+    assert "% match" in body
+    assert "Add to plan" in body
+    # The candidate (Soup) is shown; the in-plan recipe is excluded.
+    assert "Broccoli Soup" in body
+    assert "sorted by ingredient match" in body
+
+
+def test_match_mode_invalid_plan_falls_back_to_normal_search(client: TestClient):
+    r = client.get("/recipes?match_plan=9999&sort=match")
+    assert r.status_code == 200
+    # No banner; normal catalog still renders.
+    assert "Matching meals for" not in r.text
+    assert "Broccoli Stir Fry" in r.text
+
+
+def test_match_mode_requires_sort_match(client: TestClient, seeded_db_path):
+    plan_id, _ = _make_plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    # match_plan without sort=match is a normal search (no banner, no exclusion).
+    r = client.get(f"/recipes?match_plan={plan_id}")
+    assert r.status_code == 200
+    assert "Matching meals for" not in r.text
+    assert "Broccoli Stir Fry" in r.text
+
+
+def test_match_mode_add_button_adds_candidate_to_plan(client: TestClient, seeded_db_path):
+    plan_id, week_of = _make_plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    with connect(seeded_db_path) as conn:
+        soup_id = conn.execute("SELECT id FROM recipes WHERE name = 'Broccoli Soup'").fetchone()[
+            "id"
+        ]
+    r = client.post(
+        f"/recipes/{soup_id}/add-to-current-week",
+        data={"week_of": week_of, "redirect_to": f"/recipes?match_plan={plan_id}&sort=match"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    with connect(seeded_db_path) as conn:
+        rows = conn.execute(
+            "SELECT recipe_id FROM meal_plan_items WHERE plan_id = ?", (plan_id,)
+        ).fetchall()
+    assert soup_id in {row["recipe_id"] for row in rows}
+
+
+def test_plan_detail_shows_find_matching_button_when_items(client: TestClient, seeded_db_path):
+    plan_id, _ = _make_plan_with(seeded_db_path, ["Broccoli Stir Fry"])
+    r = client.get(f"/plans/{plan_id}")
+    assert r.status_code == 200
+    assert "Find matching meals" in r.text
+    assert f"match_plan={plan_id}" in r.text
+
+
+def test_plan_detail_hides_find_matching_button_when_empty(client: TestClient, seeded_db_path):
+    plan_id, _ = _make_plan_with(seeded_db_path, [])
+    r = client.get(f"/plans/{plan_id}")
+    assert r.status_code == 200
+    assert "Find matching meals" not in r.text
