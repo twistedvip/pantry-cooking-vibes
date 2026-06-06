@@ -107,6 +107,7 @@ def search_recipes(
     ingredients: list[str] | None = None,
     ingredient_mode: str = "and",
     pantry_only: bool = False,
+    offset: int = 0,
     *,
     db_path: Path | None = None,
     _max_limit: int = MAX_RESULT_LIMIT,
@@ -127,6 +128,7 @@ def search_recipes(
     """
     db = db_path or DB_PATH
     limit = _clamp_limit(limit, _max_limit)
+    offset = max(0, int(offset))
     if ingredient_mode not in ("and", "or"):
         raise ValueError("ingredient_mode must be 'and' or 'or'")
     params: list[Any] = []
@@ -207,8 +209,9 @@ def search_recipes(
         sql = sql_base
         if where:
             sql += " AND " + " AND ".join(where)
-        sql += f" {order} LIMIT ?"
+        sql += f" {order} LIMIT ? OFFSET ?"
         params.append(limit)
+        params.append(offset)
 
         rows = conn.execute(sql, params).fetchall()
     results = [_row_to_dict(r) for r in rows]
@@ -795,6 +798,7 @@ def suggest_recipes_for_plan(
     sources: list[str] | None = None,
     favorites_only: bool = False,
     limit: int = DEFAULT_RESULT_LIMIT,
+    offset: int = 0,
     candidate_pool: int = SUGGEST_CANDIDATE_POOL,
     *,
     db_path: Path | None = None,
@@ -817,12 +821,19 @@ def suggest_recipes_for_plan(
     Raises ``ValueError`` if the plan does not exist.
     """
     db = db_path or DB_PATH
-    limit = _clamp_limit(limit)
+    # +1 ceiling so a caller can request limit+1 as a "has next page" sentinel
+    # even at the public MAX_RESULT_LIMIT page size.
+    limit = _clamp_limit(limit, MAX_RESULT_LIMIT + 1)
+    offset = max(0, int(offset))
     pool = _clamp_limit(candidate_pool, MAX_SUGGEST_CANDIDATES)
     with connect(db) as conn:
         exists = conn.execute("SELECT 1 FROM meal_plans WHERE id = ?", (int(plan_id),)).fetchone()
         if exists is None:
             raise ValueError(f"meal plan {plan_id} not found")
+        # Ranking only sees the top `pool` candidates, so any page starting at or
+        # past it is empty — skip the fetch/score/sort entirely.
+        if offset >= pool:
+            return []
         have_ids = _plan_pantry_have_ids(conn, plan_id)
         in_plan = {
             r["recipe_id"]
@@ -877,7 +888,7 @@ def suggest_recipes_for_plan(
             c["name"],  # stable final tiebreak
         )
     )
-    return candidates[:limit]
+    return candidates[offset : offset + limit]
 
 
 # ---------- Shopping list (qualitative v1) ----------

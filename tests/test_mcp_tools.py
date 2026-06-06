@@ -105,6 +105,20 @@ def test_search_recipes_limit_zero_returns_one(seeded_db_path):
     assert len(rows) == 1
 
 
+def test_search_recipes_offset_paginates(seeded_db_path):
+    all_rows = tools.search_recipes(limit=50, db_path=seeded_db_path)
+    assert len(all_rows) >= 2
+    page1 = tools.search_recipes(limit=1, offset=0, db_path=seeded_db_path)
+    page2 = tools.search_recipes(limit=1, offset=1, db_path=seeded_db_path)
+    assert page1[0]["id"] != page2[0]["id"]
+    assert [page1[0]["id"], page2[0]["id"]] == [r["id"] for r in all_rows[:2]]
+
+
+def test_search_recipes_offset_past_end_returns_empty(seeded_db_path):
+    total = len(tools.search_recipes(limit=250, db_path=seeded_db_path))
+    assert tools.search_recipes(limit=50, offset=total, db_path=seeded_db_path) == []
+
+
 def test_search_recipes_sources_filter(seeded_db_path):
     # Seeded fixture has one 'manual' and one 'url' recipe.
     manual_only = tools.search_recipes(sources=["manual"], db_path=seeded_db_path)

@@ -1122,6 +1122,19 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .empty p:first-child { margin-top: 0; }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+.pagination .label { min-width: 4em; text-align: center; }
+.pagination [aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .hint {
   color: var(--ink-soft);
   font-family: 'Kalam', cursive;

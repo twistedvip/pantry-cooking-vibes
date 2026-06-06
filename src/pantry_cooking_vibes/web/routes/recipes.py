@@ -44,6 +44,9 @@ def _parse_optional_int(raw: str, field: str, *, min_value: int = 0) -> int | No
 
 
 _LIMIT_CHOICES = (50, 100, 250)
+# Upper bound on the page number so a crafted ?page= can't force a deep OFFSET
+# table scan. 200 * max page size (250) caps the skip at ~50k rows.
+_MAX_PAGE = 200
 
 
 @router.get("")
@@ -53,6 +56,7 @@ def list_recipes(
     max_time: str = Query("", description="Max cooking time in minutes (blank = no cap)"),
     tags: str = Query("", description="Comma-separated tag list"),
     limit: str = Query("50", description="Result cap (one of 50/100/250)"),
+    page: str = Query("1", description="1-based page number"),
     fav: str = Query("", description="Set to 1 to show favorites only"),
     sources: list[str] = Query(
         default_factory=list, description="Filter by source(s); empty = no restriction"
@@ -71,6 +75,15 @@ def list_recipes(
     max_time_val = _parse_optional_int(max_time, "max_time", min_value=0)
     requested_limit = _parse_optional_int(limit, "limit", min_value=1) or 50
     limit_val = requested_limit if requested_limit in _LIMIT_CHOICES else 50
+    # Page is a navigation param: a bad/out-of-range value falls back to 1
+    # rather than 422-ing the whole catalog. Clamp to _MAX_PAGE so a huge
+    # ?page= can't force a deep OFFSET table scan.
+    try:
+        page_val = max(1, min(int(page), _MAX_PAGE))
+    except (TypeError, ValueError):
+        page_val = 1
+    offset = (page_val - 1) * limit_val
+    fetch_limit = limit_val + 1
     favorites_only = fav == "1"
     pantry_only_val = pantry_only == "1"
     mode = ingredient_mode if ingredient_mode in ("and", "or") else "and"
@@ -94,6 +107,9 @@ def list_recipes(
     # whole page — log them, render an empty result so the UI stays usable.
     try:
         if match_plan_obj is not None and match_plan_id is not None:
+            # Match mode ranks only the top SUGGEST_CANDIDATE_POOL candidates,
+            # so pagination is bounded by that pool: pages past it return empty
+            # (no Next link) rather than scanning the whole catalog.
             results = tools.suggest_recipes_for_plan(
                 match_plan_id,
                 query=q,
@@ -101,7 +117,8 @@ def list_recipes(
                 tags=tag_list or None,
                 sources=selected_sources or None,
                 favorites_only=favorites_only,
-                limit=limit_val,
+                limit=fetch_limit,
+                offset=offset,
                 db_path=db_path,
             )
         else:
@@ -109,13 +126,15 @@ def list_recipes(
                 query=q,
                 max_time_min=max_time_val,
                 tags=tag_list or None,
-                limit=limit_val,
+                limit=fetch_limit,
                 favorites_only=favorites_only,
                 sources=selected_sources or None,
                 ingredients=ingredient_list or None,
                 ingredient_mode=mode,
                 pantry_only=pantry_only_val,
+                offset=offset,
                 db_path=db_path,
+                _max_limit=tools.MAX_RESULT_LIMIT + 1,
             )
     except sqlite3.OperationalError:
         # Strip CR/LF before logging so a crafted ?q= / ?tags= can't forge log
@@ -125,11 +144,22 @@ def list_recipes(
         safe_tags = [t.replace("\r\n", " ").replace("\n", " ").replace("\r", " ") for t in tag_list]
         log.exception("search_recipes failed: q=%r tags=%r", safe_q, safe_tags)
         results = []
+
+    # fetch_limit pulled one extra row as a probe: a leftover means another page
+    # exists. Trim it before display; its presence drives the Next link.
+    has_more = len(results) > limit_val
+    results = results[:limit_val]
+    prev_url = str(request.url.include_query_params(page=page_val - 1)) if page_val > 1 else None
+    next_url = str(request.url.include_query_params(page=page_val + 1)) if has_more else None
+
     return render(
         request,
         "recipes/list.html",
         {
             "recipes": results,
+            "page": page_val,
+            "prev_url": prev_url,
+            "next_url": next_url,
             "q": q,
             "max_time": max_time_val,
             "tags": ",".join(tag_list),

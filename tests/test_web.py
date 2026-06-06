@@ -156,6 +156,53 @@ def test_recipes_limit_invalid_falls_back_to_default(client: TestClient):
     assert '<option value="50" selected>50</option>' in r.text
 
 
+def test_recipes_page_two_offset_shows_previous(client: TestClient):
+    """seeded_db_path has only 2 recipes, so page 2 is past the end: empty
+    results but a working Previous link back to page 1 (Issue #54)."""
+    r = client.get("/recipes", params={"page": "2"})
+    assert r.status_code == 200
+    assert 'class="pagination"' in r.text
+    assert 'rel="prev"' in r.text
+    assert "page 2" in r.text
+
+
+def test_recipes_bad_page_falls_back_to_first(client: TestClient):
+    """A non-integer ?page= must not 422 the catalog; it falls back to page 1."""
+    r = client.get("/recipes", params={"page": "abc"})
+    assert r.status_code == 200
+    assert "Broccoli Stir Fry" in r.text  # page-1 content rendered
+
+
+def test_recipes_page_clamped_to_max(client: TestClient):
+    """A huge ?page= is clamped to _MAX_PAGE so it can't force a deep OFFSET scan."""
+    r = client.get("/recipes", params={"page": "999999"})
+    assert r.status_code == 200
+    assert "page 200" in r.text  # clamped to _MAX_PAGE
+
+
+def test_recipes_pagination_next_then_prev(db_path):
+    """With more recipes than a page holds, page 1 offers Next and page 2
+    offers Previous (Issue #54)."""
+    with connect(db_path) as conn:
+        for i in range(51):
+            conn.execute(
+                "INSERT INTO recipes (source, source_id, name) VALUES ('manual', ?, ?)",
+                (f"r{i}", f"Recipe {i:02d}"),
+            )
+        conn.commit()
+    c = TestClient(create_app(db_path=db_path))
+
+    r1 = c.get("/recipes", params={"limit": "50", "page": "1"})
+    assert r1.status_code == 200
+    assert 'rel="next"' in r1.text
+    assert 'rel="prev"' not in r1.text  # no previous on page 1
+
+    r2 = c.get("/recipes", params={"limit": "50", "page": "2"})
+    assert r2.status_code == 200
+    assert 'rel="prev"' in r2.text
+    assert 'rel="next"' not in r2.text  # only 1 recipe spills onto page 2
+
+
 def test_recipes_filter_by_ingredient(client: TestClient):
     r = client.get("/recipes", params={"ingredients": "broccoli"})
     assert r.status_code == 200

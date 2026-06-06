@@ -79,7 +79,7 @@
   <div>
     {% if recipes %}
     <div class="toolbar">
-      <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}.</p>
+      <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}{% if page > 1 or next_url %} on page {{ page }}{% endif %}.</p>
       <span class="label">{{ 'sorted by ingredient match' if match_plan else 'sorted by best match' }}</span>
     </div>
     <ul class="recipe-grid">
@@ -132,6 +132,22 @@
     </ul>
     {% else %}
     <div class="empty">No recipes match your filters. <a href="/recipes">Clear filters</a>.</div>
+    {% endif %}
+
+    {% if prev_url or next_url %}
+    <nav class="pagination" aria-label="Recipe pages">
+      {% if prev_url %}
+      <a class="btn" href="{{ prev_url }}" rel="prev">← Previous</a>
+      {% else %}
+      <span class="btn btn-reset" aria-disabled="true">← Previous</span>
+      {% endif %}
+      <span class="label">page {{ page }}</span>
+      {% if next_url %}
+      <a class="btn" href="{{ next_url }}" rel="next">Next →</a>
+      {% else %}
+      <span class="btn btn-reset" aria-disabled="true">Next →</span>
+      {% endif %}
+    </nav>
     {% endif %}
   </div>
 </div>
