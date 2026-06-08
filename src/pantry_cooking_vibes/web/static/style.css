@@ -442,21 +442,6 @@ summary:focus-visible,
   display: inline-block;
 }
 
-/* pantry match badge (reserved for when backend computes %) */
-.match {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: 'Kalam', cursive;
-  font-size: 12px;
-  background: var(--accent-soft);
-  border: 1.5px solid var(--accent);
-  padding: 1px 8px;
-  border-radius: 999px;
-  color: var(--accent-ink);
-}
-.match.full { background: var(--good); border-color: var(--good-line); color: var(--paper); }
-
 .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--line); display: inline-block; }
 .swatch.full  { background: var(--good); }
 .swatch.half  { background: var(--accent-soft); }
@@ -470,6 +455,34 @@ summary:focus-visible,
   border: 1.5px solid var(--line);
   border-radius: 3px;
   box-shadow: none;
+}
+
+/* Pantry freshness dot: the one per-row signal that actually varies. Encodes
+   expiry, not "in stock" (everything in the pantry is in stock). Colour is
+   backed by the visible "exp <date>" text + a title, so it never carries
+   meaning alone. */
+.freshness {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid var(--line);
+  flex: none;
+  display: inline-block;
+}
+.freshness.fresh   { background: var(--good);   border-color: var(--good-line); }
+.freshness.soon    { background: var(--hl);     border-color: var(--hl-line); }
+.freshness.expired { background: var(--danger); border-color: var(--line); }
+.freshness.none    { background: var(--paper-2); border-color: var(--line-soft); }
+
+.freshness-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 0 16px;
 }
 
 /* ---------- Flash messages ---------- */
@@ -959,22 +972,7 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 
 .source-link { color: var(--ink-soft); font-size: 13px; word-break: break-all; margin-top: 16px; }
 
-/* ---------- Pantry (Pantry A - categorized) ---------- */
-.pantry-toolbar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.pantry-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
+/* ---------- Pantry (categorized, read-first rows) ---------- */
 .suggestions {
   list-style: none;
   padding: 0;
@@ -1020,10 +1018,12 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .add-form input { min-width: 100px; }
 
+/* Masonry-style packing: category cards have wildly uneven heights (1 fruit vs
+   12 vegetables), so a grid leaves ragged gaps. CSS columns let short cards
+   stack under each other and the column heights balance. */
 .pantry-cats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
+  columns: 320px;
+  column-gap: 16px;
 }
 .pantry-cat {
   border: 2px solid var(--line);
@@ -1031,6 +1031,8 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   background: var(--paper);
   box-shadow: var(--shadow);
   overflow: hidden;
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 .pantry-cat > header {
   background: var(--paper-2);
@@ -1045,43 +1047,116 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   margin: 0;
 }
 .pantry-cat > header .label { font-size: 13px; }
-.pantry-item {
+
+/* Each row is a read-first <details>: the summary is a scannable
+   name · amount · expiry line; the qty/unit editor + Remove are revealed only
+   when the row is opened, so N rows don't paint N terracotta + N red buttons. */
+.pantry-item { border-bottom: 1.5px dashed var(--line-soft); }
+.pantry-item:last-child { border-bottom: none; }
+.pantry-item[open] { background: var(--hl-soft); }
+
+.pantry-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1.5px dashed var(--line-soft);
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.08s ease;
 }
-.pantry-item:last-child { border-bottom: none; }
-.pantry-item .name { font-weight: 700; min-width: 120px; flex: 1; }
-.pantry-item .qty {
+.pantry-row::-webkit-details-marker { display: none; }
+.pantry-row:hover { background: var(--paper-2); }
+.pantry-item[open] .pantry-row:hover { background: transparent; }
+.pantry-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.pantry-row .name { font-weight: 700; flex: 1; min-width: 110px; }
+.pantry-row .amount {
   font-family: 'Kalam', cursive;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ink-soft);
+  white-space: nowrap;
 }
-.pantry-item .note {
+.pantry-row .exp {
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+/* A hair darker than --hl-ink: that token clears AA on the --hl *fill*, but the
+   exp text sits on lighter paper, where #8a6a0a lands at 4.49 (just under). */
+.pantry-row .exp.soon    { color: #7a5c06; font-weight: 700; }
+.pantry-row .exp.expired { color: var(--danger); font-weight: 700; }
+.pantry-row .note {
   font-family: 'Kalam', cursive;
   font-size: 12px;
   color: var(--ink-soft);
   font-style: italic;
-  flex-basis: 100%;
 }
-.pantry-item form { margin: 0; }
-.pantry-item .edit-form {
-  display: flex;
-  gap: 4px;
+/* Disclosure affordance: a persistent caret (the at-rest "this row opens" cue,
+   so it reads on touch too) mirroring the filter rail's ▾, plus an "edit" label
+   that fades in on hover/focus/open so the action is named without 30 labels
+   shouting at rest. */
+.pantry-row .row-edit {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
 }
-.pantry-item .edit-form input[type="number"] { width: 70px; min-width: 0; }
-.pantry-item .edit-form input[type="text"] { width: 80px; min-width: 0; }
+.pantry-row .row-edit-text {
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.pantry-row:hover .row-edit-text,
+.pantry-row:focus-visible .row-edit-text,
+.pantry-item[open] .row-edit-text { opacity: 1; }
+.pantry-row .row-caret {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-soft);
+  transition: transform 0.15s ease;
+}
+.pantry-item[open] .row-caret { transform: rotate(180deg); }
+.pantry-item[open] .row-edit-text,
+.pantry-item[open] .row-caret { color: var(--accent-ink); }
+
+.pantry-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 0 14px 12px 36px;
+}
+.pantry-edit form { margin: 0; }
+.pantry-edit .edit-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.pantry-edit .edit-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--ink-soft);
+  gap: 3px;
+}
+.pantry-edit .edit-form input[type="number"] { width: 80px; min-width: 0; }
 .btn-save {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-ink);
-  padding: 4px 12px;
+  padding: 5px 14px;
   font-size: 13px;
   box-shadow: 2px 2px 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pantry-row,
+  .pantry-row .row-caret,
+  .pantry-row .row-edit-text { transition: none; }
 }
 
 /* Filters card (shared: recipe filter rail, pantry add card) */

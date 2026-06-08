@@ -65,6 +65,38 @@ def _units_for(category: str | None) -> tuple[str, ...]:
     return UNIT_OPTIONS_BY_CATEGORY.get((category or "").lower(), DEFAULT_UNIT_OPTIONS)
 
 
+def _fmt_qty(quantity: float | None) -> str:
+    """Render a stored REAL quantity without a trailing ``.0`` for whole numbers."""
+    if quantity is None:
+        return ""
+    return f"{quantity:g}"
+
+
+# "Expiring soon" window: within this many days the row dot turns amber so a
+# weekly glance flags what to cook next before it goes off.
+_SOON_DAYS = 3
+
+
+def _freshness(expires_at: str | None, today: date) -> str:
+    """Bucket a pantry item by expiry for the row's status dot.
+
+    Returns ``fresh`` / ``soon`` / ``expired`` / ``none``. ``none`` covers both
+    "no date set" and an unparseable date, so the dot never lies about urgency.
+    """
+    if not expires_at:
+        return "none"
+    try:
+        due = date.fromisoformat(expires_at)
+    except ValueError:
+        return "none"
+    days = (due - today).days
+    if days < 0:
+        return "expired"
+    if days <= _SOON_DAYS:
+        return "soon"
+    return "fresh"
+
+
 @router.get("")
 def pantry_page(
     request: Request,
@@ -76,12 +108,14 @@ def pantry_page(
     db_path: Path = Depends(get_db_path),
 ) -> object:
     items = tools.list_pantry(db_path=db_path)
+    today = date.today()
     for p in items:
         p["unit_options"] = _units_for(p.get("category"))
+        p["quantity_display"] = _fmt_qty(p.get("quantity"))
+        p["freshness"] = _freshness(p.get("expires_at"), today)
     suggestions = (
         tools.find_canonical_ingredient(search, limit=20, db_path=db_path) if search.strip() else []
     )
-    today = date.today()
     for s in suggestions:
         fd = s.get("freshness_days")
         s["suggested_expires_at"] = (today + timedelta(days=fd)).isoformat() if fd else ""
