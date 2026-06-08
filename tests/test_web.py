@@ -214,6 +214,37 @@ def test_recipe_detail(client: TestClient, seeded_db_path):
     assert "Stir fry broccoli" in r.text  # instructions
 
 
+def test_recipe_detail_caps_tags_behind_disclosure(client: TestClient, seeded_db_path):
+    """>8 tags: show the first 8, tuck the rest behind a '+N more tags'
+    disclosure, and drop nothing. Tags render ordered by name."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute(
+            "INSERT INTO recipes (source, source_id, name) "
+            "VALUES ('manual', 'many-tags', 'Many Tag Recipe') RETURNING id"
+        ).fetchone()["id"]
+        for i in range(1, 13):  # tag01..tag12 (12 tags, already alphabetical)
+            conn.execute("INSERT INTO recipe_tags VALUES (?, ?)", (rid, f"tag{i:02d}"))
+
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    # 12 tags, capped at 8 -> 4 hidden, summarized by the disclosure
+    assert "+4 more tags" in r.text
+    assert 'class="tag-more"' in r.text
+    # first tag is in the visible set; an overflow tag is still in the HTML
+    assert "tag01" in r.text
+    assert "tag12" in r.text
+
+
+def test_recipe_detail_no_tag_disclosure_when_few(client: TestClient, seeded_db_path):
+    """<=8 tags: no disclosure at all (Broccoli Stir Fry has two)."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "more tags" not in r.text
+    assert "tag-more" not in r.text
+
+
 def test_recipe_detail_shows_delete_button(client: TestClient, seeded_db_path):
     with connect(seeded_db_path) as conn:
         rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]
@@ -589,6 +620,47 @@ def test_plan_shopping_list(client: TestClient, seeded_db_path):
     assert "Need to buy" in r.text
     # unmapped 'vegetable stock' string should be surfaced
     assert "stock" in r.text
+
+
+def test_plan_shopping_collapses_multi_recipe_provenance(client: TestClient, seeded_db_path):
+    """An ingredient used by several recipes collapses to an 'in N recipes'
+    disclosure; one used by a single recipe renders inline 'for <recipe>'."""
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-05-04') RETURNING id"
+        ).fetchone()["id"]
+        for rid in conn.execute("SELECT id FROM recipes").fetchall():
+            conn.execute(
+                "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)",
+                (plan_id, rid["id"]),
+            )
+
+    r = client.get(f"/plans/{plan_id}/shopping")
+    assert r.status_code == 200
+    # broccoli is in both seeded recipes -> collapsed disclosure, not a wall
+    assert "in 2 recipes" in r.text
+    assert "<details" in r.text and "<summary>in 2 recipes</summary>" in r.text
+    # the single-recipe 'other ingredient' stays inline
+    assert "for Broccoli Stir Fry" in r.text
+
+
+def test_plan_shopping_buy_items_are_checkable(client: TestClient, seeded_db_path):
+    """Need-to-buy rows render a checkbox so the list can be ticked off in store."""
+    with connect(seeded_db_path) as conn:
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES ('2026-05-04') RETURNING id"
+        ).fetchone()["id"]
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)",
+            (plan_id, rid),
+        )
+
+    r = client.get(f"/plans/{plan_id}/shopping")
+    assert r.status_code == 200
+    # the 'other ingredient' is not in the pantry -> a checkable buy row
+    assert 'class="shop-check"' in r.text
+    assert 'type="checkbox"' in r.text
 
 
 def test_plan_shopping_missing_plan_returns_404(client: TestClient):
