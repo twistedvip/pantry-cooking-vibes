@@ -206,6 +206,10 @@ h3 { font-size: 18px; }
 .chip.acc  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 .chip.hl   { background: var(--hl); border-color: var(--hl-line); }
 .chip.dim  { opacity: 0.5; }
+/* Read-only metadata chips (recipe time/servings/rating/source): quiet
+   outline, not the ink-filled .on state, and not implying they're clickable. */
+.chip.meta { cursor: default; color: var(--ink-soft); }
+.chip.meta:hover { border-color: var(--line-soft); color: var(--ink-soft); }
 
 /* Button hierarchy:
    - default (secondary) : light shadow, demoted weight
@@ -862,6 +866,31 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   border-radius: 999px;
   color: var(--ink);
 }
+
+/* Tags are a browsing signal, not headline content: cap the visible set and
+   tuck the rest behind a quiet disclosure so they stop walling the page. */
+.tag-block { margin: 4px 0 0; }
+.tag-block .tag-list { margin: 0; }
+.tag-more { margin-top: 8px; }
+.tag-more > summary {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1.5px solid var(--line-soft);
+  padding: 2px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  list-style: none;
+}
+.tag-more > summary::-webkit-details-marker { display: none; }
+.tag-more > summary::after { content: " ▾"; margin-left: 4px; }
+.tag-more[open] > summary { color: var(--ink); border-color: var(--ink-soft); }
+.tag-more[open] > summary::after { content: " ▴"; }
+.tag-more .tag-extra { margin-top: 8px; }
 
 /* Ingredients side card */
 .ingredient-card {
@@ -1527,15 +1556,18 @@ pre.instructions {
     position: static;
     max-height: none;
     overflow: visible;
-    order: 5;
   }
+  /* Mobile order: lead with the recipe, then the commit action (Add to plan),
+     then ingredient coverage; tags drop to the bottom (lowest-value metadata).
+     The old order put .detail-actions below the whole ingredient list. */
   .detail-main { display: contents; }
   .detail-main .recipe-hero,
   .detail-main .hero-placeholder { order: 1; }
   .detail-main .detail-title { order: 2; }
   .detail-main .detail-chips { order: 3; }
-  .detail-main .tag-list { order: 4; }
-  .detail-main .detail-actions { order: 6; }
+  .detail-main .detail-actions { order: 4; }
+  .ingredient-card { order: 5; }
+  .detail-main .tag-block { order: 6; }
   .recipe-hero { height: 200px; }
   .detail-title { font-size: 28px; }
   /* Stack each plan row into a meal card so the recipe, its meta, AND the
