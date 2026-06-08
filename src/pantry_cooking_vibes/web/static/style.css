@@ -1194,6 +1194,7 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   gap: 14px;
 }
 .plan-card {
+  position: relative;
   border: 2px solid var(--line);
   border-radius: 10px;
   background: var(--paper);
@@ -1202,15 +1203,29 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: transform .12s ease, box-shadow .12s ease;
 }
-.plan-card header { display: flex; justify-content: space-between; align-items: baseline; }
+/* The whole card opens the plan (stretched title link); the action buttons
+   sit above the overlay so Shopping list / Print / Clone still work. */
+.plan-card:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--line); }
+.plan-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .plan-card .week {
   font-family: 'Caveat', cursive;
   font-size: 26px;
   font-weight: 700;
+  border-bottom: none;
 }
+.plan-card .week:hover { color: var(--accent); }
+.plan-card .week::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.plan-card .actions { position: relative; z-index: 1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .plan-card .notes { color: var(--ink-soft); font-size: 13px; font-style: italic; }
-.plan-card .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.week-exact {
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  margin-left: 4px;
+}
 
 .status-draft,
 .status-confirmed {
@@ -1232,9 +1247,9 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .plan-grid .plan-row {
   display: grid;
-  grid-template-columns: 110px 1fr 1fr 100px 90px;
-  gap: 10px;
-  padding: 10px 14px;
+  grid-template-columns: 120px minmax(0, 1fr) 96px 84px 40px;
+  gap: 12px;
+  padding: 11px 16px;
   border-bottom: 1.5px dashed var(--line-soft);
   align-items: center;
 }
@@ -1247,6 +1262,24 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   color: var(--ink-soft);
   letter-spacing: 0.5px;
 }
+
+/* Row hierarchy: the recipe is the content, the day is a quiet tag beside it. */
+.cell-when { display: flex; flex-direction: column; line-height: 1.15; }
+.when-day { font-family: 'Kalam', cursive; font-weight: 700; font-size: 14px; color: var(--ink); }
+.when-slot { font-size: 12px; color: var(--ink-soft); }
+.cell-recipe a {
+  font-family: 'Kalam', cursive;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  border-bottom: 1.5px dashed transparent;
+}
+.cell-recipe a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.cell-serv, .cell-time { font-size: 14px; color: var(--ink-soft); }
+.cell-dash { color: var(--ink-faint); }
+.cell-k { display: none; }          /* desktop: the header row names the columns */
+.cell-remove { justify-self: end; }
+.plan-row.head .cell-recipe a { font: inherit; color: inherit; }
 
 .shopping-list {
   list-style: none;
@@ -1284,6 +1317,73 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .shopping-list.covered li { background: var(--paper-2); }
 .shopping-list.unmapped li { background: var(--hl-soft); }
+
+/* Buy rows are checkable; the ingredient name leads, provenance is demoted. */
+.shop-check { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
+.shop-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-bottom: none;
+}
+.buy .shop-name .tick {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  position: relative;
+}
+.shop-check:checked + .shop-name .tick {
+  background: var(--good);
+  border-color: var(--good-line);
+}
+.shop-check:checked + .shop-name .tick::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.shop-check:checked + .shop-name { color: var(--ink-faint); text-decoration: line-through; }
+.shop-check:focus-visible + .shop-name .tick {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Provenance: one recipe inline, several behind a quiet disclosure. */
+details.used-in { margin-left: auto; }
+details.used-in > summary {
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+  width: max-content;
+  border-bottom: 1.5px dashed var(--line-soft);
+}
+details.used-in > summary::-webkit-details-marker { display: none; }
+details.used-in[open] > summary { color: var(--accent); border-bottom-color: var(--accent); }
+details.used-in > ul {
+  list-style: disc;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.shopping-list details.used-in > ul li {
+  display: list-item;
+  padding: 0;
+  border: none;
+  background: none;
+}
 
 .empty {
   color: var(--ink-soft);
@@ -1436,8 +1536,32 @@ pre.instructions {
   .detail-main .detail-actions { order: 6; }
   .recipe-hero { height: 200px; }
   .detail-title { font-size: 28px; }
-  .plan-grid .plan-row { grid-template-columns: 70px 1fr 1fr; }
-  .plan-grid .plan-row > :nth-child(n+4) { display: none; }
+  /* Stack each plan row into a meal card so the recipe, its meta, AND the
+     remove control all survive on a phone (the old rule hid columns 4-6,
+     which silently dropped Remove). */
+  .plan-grid .plan-row.head { display: none; }
+  .plan-grid .plan-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "recipe remove"
+      "when   when"
+      "serv   time";
+    gap: 4px 12px;
+    padding: 12px 14px;
+    align-items: start;
+  }
+  .plan-grid .cell-recipe { grid-area: recipe; }
+  .plan-grid .cell-remove { grid-area: remove; align-self: start; }
+  .plan-grid .cell-when {
+    grid-area: when;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .plan-grid .cell-serv { grid-area: serv; }
+  .plan-grid .cell-time { grid-area: time; justify-self: end; }
+  .plan-grid .cell-k { display: inline; color: var(--ink-faint); }
+  .plan-grid .when-slot::before { content: "· "; color: var(--ink-faint); }
 }
 
 @media (prefers-reduced-motion: reduce) {

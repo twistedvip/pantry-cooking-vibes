@@ -1,24 +1,42 @@
 {% extends "base.html" %}
 {% set active_nav = 'plans' %}
 {% block title %}Shopping list — {{ plan.week_of }}{% endblock %}
+
+{% macro provenance(recipes) %}
+  {% if recipes %}
+    {% if recipes|length == 1 %}
+    <span class="used-in">for {{ recipes[0] }}</span>
+    {% else %}
+    <details class="used-in">
+      <summary>in {{ recipes|length }} recipes</summary>
+      <ul>{% for r in recipes %}<li>{{ r }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
-<p class="breadcrumbs"><a href="/plans/{{ plan.id }}">← Plan {{ plan.week_of }}</a></p>
-<h1>Shopping list for week of {{ plan.week_of }}</h1>
+<p class="breadcrumbs"><a href="/plans/{{ plan.id }}">← Plan, week of {{ plan.week_of | humandate }}</a></p>
+<h1>Shopping list for week of {{ plan.week_of | humandate }}</h1>
 <p class="hint">
-  v1 is qualitative: it tells you which ingredients to buy vs. what the pantry
-  already covers, but doesn't sum quantities (recipe quantities aren't parsed yet).
+  Qualitative for now: which ingredients to buy vs. what the pantry already
+  covers. Quantities aren't summed yet (recipe amounts aren't parsed). Tick
+  items off as you shop — checks are for this visit and reset on reload.
 </p>
 
 <section>
   <h2>Need to buy ({{ shopping.needed|length }})</h2>
   {% if shopping.needed %}
-  <ul class="shopping-list">
+  <ul class="shopping-list buy">
     {% for n in shopping.needed %}
-    <li>
-      <span class="swatch empty"></span>
-      <strong>{{ n.name }}</strong>
+    <li class="shop-row">
+      <input type="checkbox" id="buy-{{ loop.index }}" class="shop-check">
+      <label for="buy-{{ loop.index }}" class="shop-name">
+        <span class="tick" aria-hidden="true"></span>
+        <strong>{{ n.name }}</strong>
+      </label>
       {% if n.category %}<span class="category">{{ n.category }}</span>{% endif %}
-      <span class="used-in">for {{ n.in_recipes|join(', ') }}</span>
+      {{ provenance(n.in_recipes) }}
     </li>
     {% endfor %}
   </ul>
@@ -32,11 +50,11 @@
   {% if shopping.covered_by_pantry %}
   <ul class="shopping-list covered">
     {% for c in shopping.covered_by_pantry %}
-    <li>
-      <span class="swatch full"></span>
-      <strong>{{ c.name }}</strong>
+    <li class="shop-row">
+      <span class="swatch full" aria-hidden="true"></span>
+      <span class="shop-name"><strong>{{ c.name }}</strong></span>
       {% if c.category %}<span class="category">{{ c.category }}</span>{% endif %}
-      <span class="used-in">for {{ c.in_recipes|join(', ') }}</span>
+      {{ provenance(c.in_recipes) }}
     </li>
     {% endfor %}
   </ul>
@@ -52,11 +70,14 @@
     These recipe ingredients weren't matched to a canonical ingredient —
     you'll need to judge these yourself.
   </p>
-  <ul class="shopping-list unmapped">
+  <ul class="shopping-list buy unmapped">
     {% for u in shopping.uncategorized %}
-    <li>
-      <span class="swatch half"></span>
-      <span>{{ u.original_text }}</span>
+    <li class="shop-row">
+      <input type="checkbox" id="unmapped-{{ loop.index }}" class="shop-check">
+      <label for="unmapped-{{ loop.index }}" class="shop-name">
+        <span class="tick" aria-hidden="true"></span>
+        <span>{{ u.original_text }}</span>
+      </label>
       <span class="used-in">from <a href="/recipes/{{ u.recipe_id }}">{{ u.recipe_name }}</a></span>
     </li>
     {% endfor %}

@@ -44,7 +44,11 @@ def plan_detail(
     plan = tools.get_meal_plan(plan_id, db_path=db_path)
     if plan is None:
         raise HTTPException(status_code=404, detail=f"Meal plan {plan_id} not found")
-    return render(request, "plans/detail.html", {"plan": plan})
+    return render(
+        request,
+        "plans/detail.html",
+        {"plan": plan, "current_sunday": current_sunday()},
+    )
 
 
 @router.post("/{plan_id}/favorite")

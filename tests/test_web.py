@@ -555,13 +555,15 @@ def test_plans_list_and_detail(client: TestClient, seeded_db_path):
 
     r = client.get("/plans")
     assert r.status_code == 200
-    assert "2026-04-20" in r.text
+    # Dates are humanized for reading: "Week of Apr 20", not the raw ISO.
+    assert "Week of Apr 20" in r.text
     assert "draft" in r.text
 
     r = client.get(f"/plans/{plan_id}")
     assert r.status_code == 200
     assert "Broccoli Stir Fry" in r.text
-    assert "mon" in r.text and "dinner" in r.text
+    # Day is title-cased in the row ("Mon"); meal slot stays lowercase.
+    assert "Mon" in r.text and "dinner" in r.text
 
 
 def test_plan_detail_missing_returns_404(client: TestClient):
