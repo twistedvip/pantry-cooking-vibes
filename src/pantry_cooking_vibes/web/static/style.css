@@ -210,8 +210,10 @@ h3 { font-size: 18px; }
 /* Button hierarchy:
    - default (secondary) : light shadow, demoted weight
    - .primary            : filled ink, bigger shadow, larger hit area
-   - .ghost / .btn-reset : dashed, no shadow, lowest priority
-   - .btn-danger         : red dashed outline; fills on hover only
+   - .ghost / .btn-reset : light solid border, no shadow, lowest priority
+   - .btn-danger         : solid red outline; fills on hover only
+   Dashed borders are reserved for the disabled state, so a solid outline
+   always reads as interactive.
    - .accent             : warm fill for confirmatory non-primary CTAs
    Press state collapses shadow + nudges down for tactile feedback. */
 button, .btn, .btn-link {
@@ -275,7 +277,7 @@ button:active, .btn:active, .btn-link:active {
 .btn.ghost,
 .btn-reset {
   box-shadow: none;
-  border-style: dashed;
+  border: 1.5px solid var(--line-soft);
   background: transparent;
   color: var(--ink-soft);
 }
@@ -287,13 +289,13 @@ button:active, .btn:active, .btn-link:active {
   border-color: var(--ink-soft);
   transform: none;
   text-decoration: underline;
-  text-decoration-style: dashed;
+  text-decoration-style: solid;
   text-underline-offset: 3px;
 }
 
 .btn-danger {
   background: transparent;
-  border: 2px dashed var(--danger);
+  border: 1.5px solid var(--danger);
   color: var(--danger);
   box-shadow: none;
 }
