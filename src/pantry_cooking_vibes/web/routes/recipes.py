@@ -100,6 +100,17 @@ def list_recipes(
         safe_tags = [t.replace("\r\n", " ").replace("\n", " ").replace("\r", " ") for t in tag_list]
         log.exception("search_recipes failed: q=%r tags=%r", safe_q, safe_tags)
         results = []
+
+    # Attach pantry coverage so each card can show "what can I cook now". Only
+    # meaningful when the pantry has something in it; skip the work (and the
+    # noise of all-zero badges) for an empty pantry.
+    if results and tools.list_pantry(db_path=db_path):
+        coverage = tools.pantry_coverage_for_recipes([r["id"] for r in results], db_path=db_path)
+        for r in results:
+            cov = coverage.get(r["id"])
+            if cov and cov["mapped"]:
+                r["coverage"] = cov
+
     return render(
         request,
         "recipes/list.html",

@@ -201,6 +201,26 @@ def test_search_recipes_pantry_only_with_ingredients_filter(seeded_db_path):
     assert names == {"Broccoli Soup"}
 
 
+# ---------- pantry_coverage_for_recipes ----------
+
+
+def test_pantry_coverage_for_recipes(seeded_db_path):
+    """Per-recipe have/mapped counts, ignoring unmapped ingredients like pantry_only.
+
+    Soup's only mapped ingredient is broccoli (in pantry) -> full (1/1). Stir Fry
+    needs broccoli + 'other' (both mapped), only broccoli is owned -> partial (1/2).
+    """
+    by_name = {r["name"]: r["id"] for r in tools.search_recipes(db_path=seeded_db_path)}
+    cov = tools.pantry_coverage_for_recipes(list(by_name.values()), db_path=seeded_db_path)
+
+    assert cov[by_name["Broccoli Soup"]] == {"have": 1, "mapped": 1}
+    assert cov[by_name["Broccoli Stir Fry"]] == {"have": 1, "mapped": 2}
+
+
+def test_pantry_coverage_for_recipes_empty_input(seeded_db_path):
+    assert tools.pantry_coverage_for_recipes([], db_path=seeded_db_path) == {}
+
+
 # ---------- get_recipe ----------
 
 

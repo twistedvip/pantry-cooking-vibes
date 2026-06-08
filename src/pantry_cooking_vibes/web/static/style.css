@@ -576,10 +576,27 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   margin: -4px 0 2px;
 }
 .filter-rail input { width: 100%; min-width: 0; }
+/* Checkboxes are toggles, not full-width fields: the rule above would stretch
+   their box to the column width and push the label off the left edge. Reset to
+   intrinsic size so the box sits flush left with its label beside it. */
+.filter-rail input[type="checkbox"]:not(.filters-toggle-cb) { width: auto; flex: none; margin: 2px 0 0; }
 .filter-rail select { width: 100%; min-width: 0; }
+/* Align the toggle to the first line of its label so multi-line labels (e.g.
+   "only recipes I have all ingredients for") wrap cleanly instead of centering
+   against the box. */
+.filter-rail .fav-check { align-items: flex-start; }
 .filter-rail .checkbox-list { display: flex; flex-direction: column; gap: 4px; }
 .filter-rail .checkbox-list .fav-check { width: auto; }
-.filter-rail .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Separate the commit action from the filter fields: a dashed seam (the app's
+   own divider vocabulary) plus extra space gives Filter/Reset their own beat. */
+.filter-rail .btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1.5px dashed var(--line-soft);
+}
 
 .result-count {
   font-family: 'Kalam', cursive;
@@ -723,6 +740,26 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
    in the ink-soft family rather than an off-brand blue (One Loud Color stays --accent). */
 .recipe-body .meta .src-url,
 .recipe-body .meta .src-manual { color: var(--ink-soft); }
+
+/* Pantry coverage badge: the browse grid's answer to "what can I cook now".
+   full = good-green (own every matched ingredient), partial = terracotta (own
+   some). The count is in the text too, so the signal never rests on color. */
+.recipe-body .meta .coverage {
+  font-weight: 700;
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.recipe-body .meta .coverage.full {
+  background: var(--good);
+  border-color: var(--good-line);
+  color: var(--ink);
+}
+.recipe-body .meta .coverage.partial {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 
 /* ---------- Recipe detail (Detail A - two-column classic) ---------- */
 .recipe-detail { max-width: 1100px; margin: 0 auto; }

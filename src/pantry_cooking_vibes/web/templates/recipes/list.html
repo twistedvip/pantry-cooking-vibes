@@ -116,6 +116,13 @@
           <div class="recipe-body">
             <h3 title="{{ r.name }}">{{ r.name }}</h3>
             <div class="meta">
+              {% if r.coverage and r.coverage.mapped %}
+                {% if r.coverage.have == r.coverage.mapped %}
+                <span class="coverage full" title="You have all {{ r.coverage.mapped }} of this recipe's matched ingredients">✓ have all</span>
+                {% elif r.coverage.have > 0 %}
+                <span class="coverage partial" title="You have {{ r.coverage.have }} of {{ r.coverage.mapped }} matched ingredients">have {{ r.coverage.have }} of {{ r.coverage.mapped }}</span>
+                {% endif %}
+              {% endif %}
               {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
               {% if r.servings %}<span>🍽 {{ r.servings }} servings</span>{% endif %}
               {% if r.rating is not none %}<span>★ {{ "%.1f"|format(r.rating) }}{% if r.rating_count %} ({{ r.rating_count }}){% endif %}</span>{% endif %}
