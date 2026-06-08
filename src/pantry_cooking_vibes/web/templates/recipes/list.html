@@ -7,24 +7,46 @@
 
 <div class="browser-layout">
   <form class="filter-rail" method="get" action="/recipes">
+    {# Count active filters so the collapsed mobile disclosure can report state
+       and auto-open when any filter is applied. #}
+    {% set ns = namespace(active=0) %}
+    {% if q %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if max_time is not none %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if tags %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if ingredients %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if selected_sources %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if favorites_only %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if pantry_only %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {# Checkbox-driven disclosure: invisible but focusable, toggled by the label
+       below. Drives the mobile collapse via CSS only (see .filter-rail-body).
+       Pre-checked when filters are active so applied state stays visible. #}
+    <input type="checkbox" id="filters-toggle" class="filters-toggle-cb"
+           {% if ns.active %}checked{% endif %}>
+    <label for="filters-toggle" class="filter-summary">
+      <span class="filter-summary-label">Filters</span>
+      <span class="filter-summary-meta">{% if ns.active %}{{ ns.active }} active{% else %}showing all{% endif %}</span>
+      <span class="filter-summary-caret" aria-hidden="true">▾</span>
+    </label>
+    <div class="filter-rail-body">
     <div class="rail-group">
-      <span class="label">search</span>
-      <input type="text" name="q" value="{{ q }}" placeholder="broccoli stir fry…">
+      <label class="label" for="f-q">search</label>
+      <input type="text" id="f-q" name="q" value="{{ q }}" placeholder="broccoli stir fry…">
     </div>
     <div class="rail-group">
-      <span class="label">max cook time (min)</span>
-      <input type="number" name="max_time" value="{{ max_time if max_time is not none else '' }}" min="0" placeholder="e.g. 30">
+      <label class="label" for="f-max-time">max cook time (min)</label>
+      <input type="number" id="f-max-time" name="max_time" value="{{ max_time if max_time is not none else '' }}" min="0" placeholder="e.g. 30">
     </div>
     <div class="rail-group">
-      <span class="label">tags (comma-separated)</span>
-      <input type="text" name="tags" value="{{ tags }}" placeholder="quick, gluten-free">
+      <label class="label" for="f-tags">tags (comma-separated)</label>
+      <input type="text" id="f-tags" name="tags" value="{{ tags }}" placeholder="quick, gluten-free">
     </div>
     <div class="rail-group">
-      <span class="label">ingredients (comma-separated canonical names)</span>
-      <input type="text" name="ingredients" value="{{ ingredients }}" placeholder="broccoli, chicken">
-      <select name="ingredient_mode">
-        <option value="and" {% if ingredient_mode == 'and' %}selected{% endif %}>match all (AND)</option>
-        <option value="or" {% if ingredient_mode == 'or' %}selected{% endif %}>match any (OR)</option>
+      <label class="label" for="f-ingredients">ingredients</label>
+      <span class="rail-hint">Simple base names, separated by commas (e.g. chicken, broccoli).</span>
+      <input type="text" id="f-ingredients" name="ingredients" value="{{ ingredients }}" placeholder="chicken, broccoli">
+      <select name="ingredient_mode" aria-label="How to match ingredients">
+        <option value="and" {% if ingredient_mode == 'and' %}selected{% endif %}>Has every ingredient</option>
+        <option value="or" {% if ingredient_mode == 'or' %}selected{% endif %}>Has any ingredient</option>
       </select>
       <label class="fav-check">
         <input type="checkbox" name="pantry_only" value="1" {% if pantry_only %}checked{% endif %}>
@@ -32,8 +54,9 @@
       </label>
     </div>
     {% if available_sources %}
-    <div class="rail-group">
-      <span class="label">sources (none = all)</span>
+    <fieldset class="rail-group">
+      <legend class="label">recipe source</legend>
+      <span class="rail-hint">Leave unchecked to include all sources.</span>
       <div class="checkbox-list">
         {% for s in available_sources %}
         <label class="fav-check">
@@ -42,11 +65,11 @@
         </label>
         {% endfor %}
       </div>
-    </div>
+    </fieldset>
     {% endif %}
     <div class="rail-group">
-      <span class="label">result limit</span>
-      <select name="limit">
+      <label class="label" for="f-limit">result limit</label>
+      <select id="f-limit" name="limit">
         {% for c in limit_choices %}
         <option value="{{ c }}" {% if c == limit %}selected{% endif %}>{{ c }}</option>
         {% endfor %}
@@ -62,13 +85,15 @@
       <button type="submit" class="primary">Filter</button>
       <a class="btn btn-reset" href="/recipes">Reset</a>
     </div>
+    </div><!-- /.filter-rail-body -->
   </form>
 
   <div>
     {% if recipes %}
+    <h2 class="visually-hidden">Recipe results</h2>
     <div class="toolbar">
       <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}.</p>
-      <span class="label">sorted by best match</span>
+      <span class="label">{% if q %}sorted by best match{% else %}top-rated first{% endif %}</span>
     </div>
     <ul class="recipe-grid">
       {% for r in recipes %}
@@ -102,7 +127,11 @@
       {% endfor %}
     </ul>
     {% else %}
-    <div class="empty">No recipes match your filters. <a href="/recipes">Clear filters</a>.</div>
+    <div class="empty">
+      <p>No recipes match these filters.</p>
+      <p class="hint">Try removing a filter, or use simpler ingredient names like “chicken” or “rice”.</p>
+      <p><a href="/recipes">Clear all filters</a></p>
+    </div>
     {% endif %}
   </div>
 </div>
