@@ -32,6 +32,8 @@ db_backups/
 
 # Raw scraped data (large)
 data/raw/
+# Scraper submodules write raw JSONL under scrapers/data/raw/<name>/
+scrapers/data/
 
 # Logs
 *.log
