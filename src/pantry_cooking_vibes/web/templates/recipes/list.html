@@ -114,7 +114,7 @@
           <div class="recipe-thumb placeholder">🍽</div>
           {% endif %}
           <div class="recipe-body">
-            <h3>{{ r.name }}</h3>
+            <h3 title="{{ r.name }}">{{ r.name }}</h3>
             <div class="meta">
               {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
               {% if r.servings %}<span>🍽 {{ r.servings }} servings</span>{% endif %}

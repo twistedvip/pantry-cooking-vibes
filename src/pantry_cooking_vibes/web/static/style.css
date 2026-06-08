@@ -700,7 +700,16 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   font-family: 'Caveat', cursive;
   font-size: 22px;
   margin: 0;
-  line-height: 1.1;
+  line-height: 1.12;
+  /* Caveat runs long; clamp recipe names to two lines so every card keeps the
+     same title band and the meta rows align across a grid row. The full name
+     stays reachable via the title attribute and the detail page. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-height: calc(2 * 1.12em); /* reserve two lines even for short titles */
 }
 .recipe-body .meta {
   display: flex;
