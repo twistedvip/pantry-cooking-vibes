@@ -15,6 +15,13 @@ def client(seeded_db_path) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def client_empty(db_path) -> TestClient:
+    """Client on a schema-only DB (no recipes) for first-run home checks."""
+    app = create_app(db_path=db_path)
+    return TestClient(app)
+
+
 # ---------- home ----------
 
 
@@ -36,10 +43,32 @@ def test_home_shows_counts(client: TestClient):
     assert r.status_code == 200
     body = r.text
     assert "Pantry Cooking Vibes" in body
-    # seeded_db_path has 2 recipes, 1 pantry item, 0 plans, >0 canonical ingredients
+    # seeded_db_path has 2 recipes, 1 pantry item, 0 plans.
     assert "Recipes" in body and "Pantry" in body and "Plans" in body
-    assert ">2<" in body or "2</span>" in body  # recipe count
-    assert ">1<" in body or "1</span>" in body  # pantry count
+    assert ">2<" in body  # recipe count in the glance strip
+    assert ">1<" in body  # pantry count in the glance strip
+
+
+def test_home_shows_decision_sections(client: TestClient):
+    """The home leads with decision sections, not a metric-card grid."""
+    r = client.get("/")
+    body = r.text
+    assert "In the kitchen" in body
+    assert "Ready to cook" in body
+    assert "Use it soon" in body
+    assert "This week" in body
+    # The retired hero-metric scaffolding must be gone.
+    assert "stat-card" not in body
+    assert "canonical ingredients" not in body.lower()
+
+
+def test_home_first_run_teaches_import(client_empty: TestClient):
+    """With no recipes imported, the home onboards instead of showing zeros."""
+    r = client_empty.get("/")
+    assert r.status_code == 200
+    body = r.text
+    assert "Start by importing recipes" in body
+    assert "meal-cli import" in body
 
 
 def test_static_mounted(client: TestClient):
