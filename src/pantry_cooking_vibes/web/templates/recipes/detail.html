@@ -16,16 +16,26 @@
       <h1 class="detail-title">{{ recipe.name }}</h1>
 
       <div class="detail-chips">
-        {% if recipe.cooking_time_min is not none %}<span class="chip on">⏱ {{ recipe.cooking_time_min }} min</span>{% endif %}
-        {% if recipe.servings %}<span class="chip on">🍽 serves {{ recipe.servings }}</span>{% endif %}
-        {% if recipe.rating is not none %}<span class="chip on">★ {{ "%.1f"|format(recipe.rating) }}{% if recipe.rating_count %} ({{ recipe.rating_count }}){% endif %}</span>{% endif %}
-        <span class="chip src-{{ recipe.source }}">{{ recipe.source }}</span>
+        {% if recipe.cooking_time_min is not none %}<span class="chip meta">⏱ {{ recipe.cooking_time_min }} min</span>{% endif %}
+        {% if recipe.servings %}<span class="chip meta">🍽 serves {{ recipe.servings }}</span>{% endif %}
+        {% if recipe.rating is not none %}<span class="chip meta">★ {{ "%.1f"|format(recipe.rating) }}{% if recipe.rating_count %} ({{ recipe.rating_count }}){% endif %}</span>{% endif %}
+        <span class="chip meta src-{{ recipe.source }}">{{ recipe.source }}</span>
       </div>
 
       {% if recipe.tags %}
-      <ul class="tag-list">
-        {% for tag in recipe.tags %}<li>{{ tag }}</li>{% endfor %}
-      </ul>
+      <div class="tag-block">
+        <ul class="tag-list">
+          {% for tag in recipe.tags[:8] %}<li>{{ tag }}</li>{% endfor %}
+        </ul>
+        {% if recipe.tags|length > 8 %}
+        <details class="tag-more">
+          <summary>+{{ recipe.tags|length - 8 }} more tags</summary>
+          <ul class="tag-list tag-extra">
+            {% for tag in recipe.tags[8:] %}<li>{{ tag }}</li>{% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </div>
       {% endif %}
 
       <div class="detail-actions">

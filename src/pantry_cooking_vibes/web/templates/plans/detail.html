@@ -6,11 +6,12 @@
 
 <div class="row between wrap gap-12">
   <div>
-    <h1>Week of {{ plan.week_of }}</h1>
+    {% set wl = plan.week_of | weeklabel(current_sunday.isoformat()) %}
+    <h1>{{ wl }}{% if not wl.startswith('Week of') %} <span class="week-exact">{{ plan.week_of | humandate }}</span>{% endif %}</h1>
     <div class="row gap-8 wrap">
       <span class="status-{{ plan.status }}">{{ plan.status }}</span>
       <span class="coverage-chip chip acc">{{ plan.coverage.percent }}% pantry</span>
-      {% if plan.created_at %}<span class="label">created {{ plan.created_at }}</span>{% endif %}
+      {% if plan.created_at %}<span class="label">created {{ plan.created_at | humanstamp }}</span>{% endif %}
     </div>
   </div>
   <div class="row gap-8 wrap">
@@ -35,19 +36,25 @@
 {% if plan['items'] %}
 <div class="plan-grid mt-16">
   <div class="plan-row head">
-    <span>day</span><span>meal</span><span>recipe</span><span>servings</span><span>time</span><span></span>
+    <span class="cell-when">when</span>
+    <span class="cell-recipe">recipe</span>
+    <span class="cell-serv">serves</span>
+    <span class="cell-time">time</span>
+    <span class="cell-remove"></span>
   </div>
   {% for item in plan['items'] %}
   <div class="plan-row">
-    <span><span class="chip on">{{ item.day or '—' }}</span></span>
-    <span class="label">{{ item.meal_slot or '—' }}</span>
-    <span><a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a></span>
-    <span>{{ item.servings_planned }}</span>
-    <span>{{ item.cooking_time_min if item.cooking_time_min is not none else '' }}{% if item.cooking_time_min is not none %} min{% endif %}</span>
-    <span>
+    <span class="cell-when">
+      <span class="when-day">{{ item.day|capitalize if item.day else '—' }}</span>
+      {% if item.meal_slot %}<span class="when-slot">{{ item.meal_slot }}</span>{% endif %}
+    </span>
+    <span class="cell-recipe"><a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a></span>
+    <span class="cell-serv"><span class="cell-k">serves </span>{{ item.servings_planned }}</span>
+    <span class="cell-time">{% if item.cooking_time_min is not none %}{{ item.cooking_time_min }} min{% else %}<span class="cell-dash">—</span>{% endif %}</span>
+    <span class="cell-remove">
       <form method="post" action="/plans/{{ plan.id }}/items/{{ item.id }}/delete" style="display:inline">
         <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}">
-        <button type="submit" class="btn-danger" title="Remove from plan">✕</button>
+        <button type="submit" class="btn-danger" title="Remove {{ item.recipe_name }} from this plan">✕</button>
       </form>
     </span>
   </div>

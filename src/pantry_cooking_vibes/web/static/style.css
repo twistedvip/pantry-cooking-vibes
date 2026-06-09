@@ -1,4 +1,4 @@
-/* Meal Planner — sketch wireframe system (ported from Claude Design) */
+/* Meal Planner - sketch wireframe system (ported from Claude Design) */
 :root {
   --ink: #1f1d1a;
   --ink-soft: #4a4742;
@@ -10,11 +10,20 @@
   --accent: #c7873a;
   --accent-soft: #e9c98a;
   /* Demoted secondary accents: muted toward the ochre family so --accent stays
-     the only loud color. Was #f3d98a / #6b8e4e — competing with --accent. */
+     the only loud color. Was #f3d98a / #6b8e4e - competing with --accent. */
   --hl: #ead7a2;
   --dim: #d9d2bf;
   --good: #8a9a6a;
   --danger: #b23b3b;
+  /* Derived tones promoted out of one-off hexes so the warm sketch palette has a
+     single source of truth. accent-ink/hl-ink are the dark text colors that clear
+     AA on the soft accent/highlight fills; *-line are their matching borders. */
+  --accent-ink: #5a3b14;   /* text on --accent-soft fills */
+  --hl-ink: #8a6a0a;       /* text on --hl fills (favorited star) */
+  --hl-line: #c9a635;      /* border for --hl notes/badges */
+  --good-line: #4d6a37;    /* border for --good full-match badge */
+  --danger-soft: #fde1e1;  /* error flash background */
+  --hl-soft: #fff9e6;      /* faint highlight background (unmapped rows) */
 
   --gap: 16px;
   --pad: 14px;
@@ -28,7 +37,7 @@ html, body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Kalam', 'Comic Sans MS', cursive;
+  font-family: 'Kalam', cursive;
   font-size: 16px;
   line-height: 1.45;
 }
@@ -151,6 +160,16 @@ h3 { font-size: 18px; }
 .mb-4 { margin-bottom: 4px; } .mb-8{margin-bottom:8px;} .mb-12{margin-bottom:12px;}
 .tc { text-align:center; } .tr{ text-align:right; }
 
+/* Available to assistive tech, removed from the visual flow. Used for section
+   headings that keep the document outline intact without adding visible chrome. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .label {
   font-family: 'Kalam', cursive;
   font-size: 12px;
@@ -164,7 +183,7 @@ h3 { font-size: 18px; }
   font-size: 16px;
   font-style: italic;
 }
-.anno::before { content: "↳ "; }
+.anno::before { content: "â†³ "; }
 
 .divider { border: none; border-top: 1.5px dashed var(--line-soft); margin: 12px 0; }
 
@@ -184,15 +203,21 @@ h3 { font-size: 18px; }
 }
 .chip:hover { border-color: var(--line); color: var(--ink); }
 .chip.on   { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.chip.acc  { background: var(--accent-soft); border-color: var(--accent); color: #5a3b14; }
-.chip.hl   { background: var(--hl); border-color: #c9a635; }
+.chip.acc  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.chip.hl   { background: var(--hl); border-color: var(--hl-line); }
 .chip.dim  { opacity: 0.5; }
+/* Read-only metadata chips (recipe time/servings/rating/source): quiet
+   outline, not the ink-filled .on state, and not implying they're clickable. */
+.chip.meta { cursor: default; color: var(--ink-soft); }
+.chip.meta:hover { border-color: var(--line-soft); color: var(--ink-soft); }
 
 /* Button hierarchy:
    - default (secondary) : light shadow, demoted weight
    - .primary            : filled ink, bigger shadow, larger hit area
-   - .ghost / .btn-reset : dashed, no shadow, lowest priority
-   - .btn-danger         : red dashed outline; fills on hover only
+   - .ghost / .btn-reset : light solid border, no shadow, lowest priority
+   - .btn-danger         : solid red outline; fills on hover only
+   Dashed borders are reserved for the disabled state, so a solid outline
+   always reads as interactive.
    - .accent             : warm fill for confirmatory non-primary CTAs
    Press state collapses shadow + nudges down for tactile feedback. */
 button, .btn, .btn-link {
@@ -243,7 +268,7 @@ button:active, .btn:active, .btn-link:active {
 .btn.accent {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #5a3b14;
+  color: var(--accent-ink);
   box-shadow: 2px 2px 0 var(--accent);
 }
 .btn.accent:hover {
@@ -256,7 +281,7 @@ button:active, .btn:active, .btn-link:active {
 .btn.ghost,
 .btn-reset {
   box-shadow: none;
-  border-style: dashed;
+  border: 1.5px solid var(--line-soft);
   background: transparent;
   color: var(--ink-soft);
 }
@@ -268,13 +293,13 @@ button:active, .btn:active, .btn-link:active {
   border-color: var(--ink-soft);
   transform: none;
   text-decoration: underline;
-  text-decoration-style: dashed;
+  text-decoration-style: solid;
   text-underline-offset: 3px;
 }
 
 .btn-danger {
   background: transparent;
-  border: 2px dashed var(--danger);
+  border: 1.5px solid var(--danger);
   color: var(--danger);
   box-shadow: none;
 }
@@ -326,7 +351,7 @@ button[disabled]:hover,
   box-shadow: var(--shadow);
 }
 .search::before {
-  content: "⌕";
+  content: "âŒ•";
   font-size: 14px;
   color: var(--ink-soft);
 }
@@ -356,10 +381,35 @@ select {
   box-shadow: 1px 1px 0 var(--line-soft);
   min-width: 140px;
 }
-input:focus, textarea:focus {
-  outline: none;
+input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
   box-shadow: 1px 1px 0 var(--accent);
+}
+/* Placeholder text must clear AA (4.5:1). The UA default (~#757575) is 4.09:1
+   on paper; ink-soft is 8.2:1 and stays visibly lighter than typed --ink text. */
+::placeholder {
+  color: var(--ink-soft);
+  opacity: 1;
+}
+
+/* Keyboard focus: one clear accent ring on every interactive element. The
+   inputs keep their accent border/shadow shift too; this adds the ring that
+   buttons, links, and the favorite toggle were missing (WCAG 2.4.7). */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+.fav-btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Mouse/touch activation shouldn't paint the ring, only keyboard. */
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* photo placeholder (used when no image_url) */
@@ -388,7 +438,7 @@ input:focus, textarea:focus {
 /* sticky note */
 .note {
   background: var(--hl);
-  border: 1.5px solid #c9a635;
+  border: 1.5px solid var(--hl-line);
   border-radius: 4px;
   padding: 8px 12px;
   font-family: 'Kalam', cursive;
@@ -397,21 +447,6 @@ input:focus, textarea:focus {
   transform: rotate(-1deg);
   display: inline-block;
 }
-
-/* pantry match badge (reserved for when backend computes %) */
-.match {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: 'Kalam', cursive;
-  font-size: 12px;
-  background: var(--accent-soft);
-  border: 1.5px solid var(--accent);
-  padding: 1px 8px;
-  border-radius: 999px;
-  color: #5a3b14;
-}
-.match.full { background: var(--good); border-color: #4d6a37; color: #fff; }
 
 .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--line); display: inline-block; }
 .swatch.full  { background: var(--good); }
@@ -428,6 +463,34 @@ input:focus, textarea:focus {
   box-shadow: none;
 }
 
+/* Pantry freshness dot: the one per-row signal that actually varies. Encodes
+   expiry, not "in stock" (everything in the pantry is in stock). Colour is
+   backed by the visible "exp <date>" text + a title, so it never carries
+   meaning alone. */
+.freshness {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid var(--line);
+  flex: none;
+  display: inline-block;
+}
+.freshness.fresh   { background: var(--good);   border-color: var(--good-line); }
+.freshness.soon    { background: var(--hl);     border-color: var(--hl-line); }
+.freshness.expired { background: var(--danger); border-color: var(--line); }
+.freshness.none    { background: var(--paper-2); border-color: var(--line-soft); }
+
+.freshness-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 0 16px;
+}
+
 /* ---------- Flash messages ---------- */
 .flash {
   padding: 8px 14px;
@@ -438,68 +501,136 @@ input:focus, textarea:focus {
   box-shadow: var(--shadow);
 }
 .flash.ok    { background: var(--accent-soft); border-color: var(--accent); }
-.flash.error { background: #fde1e1; border-color: var(--danger); color: var(--danger); }
+.flash.error { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
 
-/* ---------- Dashboard home ---------- */
-.hero-card {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 16px;
-  align-items: center;
-  padding: 16px;
-}
-.hero-card .photo { width: 140px; height: 110px; border-radius: 8px; }
+/* ---------- Home: decision-first overview ----------
+   No metric-card grid. A quiet count strip, then three sections that each
+   answer a real question: what can I cook now, what to use up, where the week
+   stands. Reuses the recipe card, coverage badge, and freshness dot vocab. */
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px;
-  margin-top: 14px;
-}
-.stat-card {
-  border: 2px solid var(--line);
-  background: var(--paper);
-  border-radius: 8px;
-  padding: 14px;
-  text-align: center;
-  box-shadow: var(--shadow);
-  text-decoration: none;
-  color: var(--ink);
-  transition: transform .08s ease;
-}
-.stat-card:hover {
-  transform: translate(-1px,-1px);
-  color: var(--ink);
-  border-color: var(--accent);
-}
-a.stat-card { border-bottom: 2px solid var(--line); }
-a.stat-card:hover { border-bottom-color: var(--accent); }
-.stat-num {
-  display: block;
-  font-family: 'Caveat', cursive;
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-}
-.stat-label {
+/* The counts, demoted from trophy cards to one inline line. Caveat keeps the
+   handwritten character on the numbers without making them the headline. */
+.glance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
   font-family: 'Kalam', cursive;
+  font-size: 14px;
   color: var(--ink-soft);
+  margin: -4px 0 28px;
+}
+.glance a { color: var(--ink-soft); border-bottom: none; }
+.glance a:hover { color: var(--accent); }
+.glance strong {
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 21px;
+  color: var(--ink);
+}
+.glance-sep { color: var(--line-soft); }
+
+.home-section { margin: 0 0 28px; }
+.home-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 2px dashed var(--line-soft);
+}
+.home-section-head h2 { margin: 0; }
+.see-all {
+  font-family: 'Kalam', cursive;
   font-size: 13px;
-  text-transform: lowercase;
-  margin-top: 6px;
-  display: block;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  border-bottom: none;
+}
+.see-all:hover { color: var(--accent); }
+.section-sub { color: var(--ink-soft); font-size: 13px; margin: -6px 0 12px; }
+.section-empty { color: var(--ink-soft); font-size: 14px; margin: 2px 0 0; }
+
+/* Ready-to-cook grid: a touch denser than the browse grid since it caps at four. */
+.home-ready { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+/* The secondary band: two equal columns on desktop, stacked on narrow screens. */
+.home-band {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 28px;
+  align-items: start;
 }
 
-/* ---------- Recipe browser (Browser A — filter rail + grid) ---------- */
+/* Nudge: an empty state that teaches and offers the next action, never a bare
+   "nothing here". The active variant tints highlight to draw the eye; .soft
+   stays on paper for the lower-stakes "browse instead" cases. */
+.nudge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border: 2px dashed var(--line-soft);
+  border-radius: 10px;
+  background: var(--hl-soft);
+}
+.nudge.soft { background: var(--paper); }
+.nudge p { margin: 0; max-width: 60ch; }
+
+/* Use it soon: compact rows reusing the pantry freshness dot + "exp" colours. */
+.soon-list { list-style: none; padding: 0; margin: 0; }
+.soon-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-bottom: 1.5px dashed var(--line-soft);
+}
+.soon-list li:last-child { border-bottom: none; }
+.soon-name { font-weight: 700; }
+.soon-meta { color: var(--ink-soft); font-size: 13px; }
+.soon-list .exp {
+  margin-left: auto;
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+.soon-list .exp.soon { color: var(--accent-ink); font-weight: 700; }
+.soon-list .exp.expired { color: var(--danger); font-weight: 700; }
+
+/* This week's plan summary: meal names in Caveat with a terracotta tick. */
+.week-summary { display: flex; flex-direction: column; gap: 12px; }
+.week-meals { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.week-meals li {
+  position: relative;
+  padding-left: 18px;
+  font-family: 'Caveat', cursive;
+  font-size: 20px;
+  line-height: 1.15;
+}
+.week-meals li::before { content: "•"; position: absolute; left: 2px; color: var(--accent); }
+
+/* First-run welcome: the import path, on paper, capped to a comfortable measure. */
+.welcome { max-width: 70ch; background: var(--paper); }
+.welcome h2 { margin-top: 0; }
+.welcome .instructions { margin: 12px 0; }
+
+@media (max-width: 720px) {
+  .home-band { grid-template-columns: 1fr; }
+}
+
+/* ---------- Recipe browser (Browser A - filter rail + grid) ---------- */
 .browser-layout {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 24px;
 }
 .filter-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* The form is the sticky left column card on desktop; the flex stack lives on
+     .filter-rail-body so it can be collapsed independently on mobile. */
   padding: 16px;
   border: 2px solid var(--line);
   border-radius: 10px;
@@ -509,13 +640,51 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   position: sticky;
   top: 20px;
 }
+.filter-rail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* Mobile-only disclosure control: hidden entirely at desktop width. */
+.filters-toggle-cb,
+.filter-summary { display: none; }
 .filter-rail .rail-group { display: flex; flex-direction: column; gap: 6px; }
 .filter-rail .rail-group > .label { margin-bottom: 2px; }
+/* A grouped set of related checkboxes is a real <fieldset>; strip the UA chrome
+   so it stacks like every other .rail-group. min-width:0 stops the legacy
+   fieldset min-content floor from blowing out the narrow rail. */
+.filter-rail fieldset.rail-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+.filter-rail fieldset.rail-group > legend.label { padding: 0; margin-bottom: 2px; }
+/* Plain-language helper under a filter label (e.g. what "ingredients" expects). */
+.rail-hint {
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  margin: -4px 0 2px;
+}
 .filter-rail input { width: 100%; min-width: 0; }
+/* Checkboxes are toggles, not full-width fields: the rule above would stretch
+   their box to the column width and push the label off the left edge. Reset to
+   intrinsic size so the box sits flush left with its label beside it. */
+.filter-rail input[type="checkbox"]:not(.filters-toggle-cb) { width: auto; flex: none; margin: 2px 0 0; }
 .filter-rail select { width: 100%; min-width: 0; }
+/* Align the toggle to the first line of its label so multi-line labels (e.g.
+   "only recipes I have all ingredients for") wrap cleanly instead of centering
+   against the box. */
+.filter-rail .fav-check { align-items: flex-start; }
 .filter-rail .checkbox-list { display: flex; flex-direction: column; gap: 4px; }
 .filter-rail .checkbox-list .fav-check { width: auto; }
-.filter-rail .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Separate the commit action from the filter fields: a dashed seam (the app's
+   own divider vocabulary) plus extra space gives Filter/Reset their own beat. */
+.filter-rail .btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1.5px dashed var(--line-soft);
+}
 
 .result-count {
   font-family: 'Kalam', cursive;
@@ -573,15 +742,27 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   cursor: pointer;
 }
 .fav-btn:hover { color: var(--accent); }
+/* Touch devices: grow the favorite toggle to a comfortable 44px target. */
+@media (pointer: coarse) {
+  .fav-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+}
 .fav-btn.on {
   background: var(--hl);
-  color: #8a6a0a;
-  border-color: #c9a635;
+  color: var(--hl-ink);
+  border-color: var(--hl-line);
 }
 .fav-check {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 24px; /* WCAG 2.5.8: the label is the toggle's hit area */
   font-family: 'Kalam', cursive;
   font-size: 13px;
   color: var(--ink);
@@ -624,7 +805,16 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   font-family: 'Caveat', cursive;
   font-size: 22px;
   margin: 0;
-  line-height: 1.1;
+  line-height: 1.12;
+  /* Caveat runs long; clamp recipe names to two lines so every card keeps the
+     same title band and the meta rows align across a grid row. The full name
+     stays reachable via the title attribute and the detail page. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-height: calc(2 * 1.12em); /* reserve two lines even for short titles */
 }
 .recipe-body .meta {
   display: flex;
@@ -634,10 +824,32 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   font-size: 12px;
   font-family: 'Kalam', cursive;
 }
-.recipe-body .meta .src-url { color: #4a7fd1; }
+/* Source label is just metadata; the source name already names itself. Keep it
+   in the ink-soft family rather than an off-brand blue (One Loud Color stays --accent). */
+.recipe-body .meta .src-url,
 .recipe-body .meta .src-manual { color: var(--ink-soft); }
 
-/* ---------- Recipe detail (Detail A — two-column classic) ---------- */
+/* Pantry coverage badge: the browse grid's answer to "what can I cook now".
+   full = good-green (own every matched ingredient), partial = terracotta (own
+   some). The count is in the text too, so the signal never rests on color. */
+.recipe-body .meta .coverage {
+  font-weight: 700;
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.recipe-body .meta .coverage.full {
+  background: var(--good);
+  border-color: var(--good-line);
+  color: var(--ink);
+}
+.recipe-body .meta .coverage.partial {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---------- Recipe detail (Detail A - two-column classic) ---------- */
 .recipe-detail { max-width: 1100px; margin: 0 auto; }
 
 .detail-grid {
@@ -698,8 +910,8 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .detail-actions .fav-action.on {
   background: var(--hl);
-  border-color: #c9a635;
-  color: #8a6a0a;
+  border-color: var(--hl-line);
+  color: var(--hl-ink);
 }
 .add-to-plan-form {
   display: inline-flex;
@@ -723,6 +935,31 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   border-radius: 999px;
   color: var(--ink);
 }
+
+/* Tags are a browsing signal, not headline content: cap the visible set and
+   tuck the rest behind a quiet disclosure so they stop walling the page. */
+.tag-block { margin: 4px 0 0; }
+.tag-block .tag-list { margin: 0; }
+.tag-more { margin-top: 8px; }
+.tag-more > summary {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1.5px solid var(--line-soft);
+  padding: 2px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  list-style: none;
+}
+.tag-more > summary::-webkit-details-marker { display: none; }
+.tag-more > summary::after { content: " ▾"; margin-left: 4px; }
+.tag-more[open] > summary { color: var(--ink); border-color: var(--ink-soft); }
+.tag-more[open] > summary::after { content: " ▴"; }
+.tag-more .tag-extra { margin-top: 8px; }
 
 /* Ingredients side card */
 .ingredient-card {
@@ -835,22 +1072,7 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 
 .source-link { color: var(--ink-soft); font-size: 13px; word-break: break-all; margin-top: 16px; }
 
-/* ---------- Pantry (Pantry A — categorized) ---------- */
-.pantry-toolbar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.pantry-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
+/* ---------- Pantry (categorized, read-first rows) ---------- */
 .suggestions {
   list-style: none;
   padding: 0;
@@ -896,10 +1118,12 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .add-form input { min-width: 100px; }
 
+/* Masonry-style packing: category cards have wildly uneven heights (1 fruit vs
+   12 vegetables), so a grid leaves ragged gaps. CSS columns let short cards
+   stack under each other and the column heights balance. */
 .pantry-cats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
+  columns: 320px;
+  column-gap: 16px;
 }
 .pantry-cat {
   border: 2px solid var(--line);
@@ -907,6 +1131,8 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   background: var(--paper);
   box-shadow: var(--shadow);
   overflow: hidden;
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 .pantry-cat > header {
   background: var(--paper-2);
@@ -921,43 +1147,116 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   margin: 0;
 }
 .pantry-cat > header .label { font-size: 13px; }
-.pantry-item {
+
+/* Each row is a read-first <details>: the summary is a scannable
+   name · amount · expiry line; the qty/unit editor + Remove are revealed only
+   when the row is opened, so N rows don't paint N terracotta + N red buttons. */
+.pantry-item { border-bottom: 1.5px dashed var(--line-soft); }
+.pantry-item:last-child { border-bottom: none; }
+.pantry-item[open] { background: var(--hl-soft); }
+
+.pantry-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1.5px dashed var(--line-soft);
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.08s ease;
 }
-.pantry-item:last-child { border-bottom: none; }
-.pantry-item .name { font-weight: 700; min-width: 120px; flex: 1; }
-.pantry-item .qty {
+.pantry-row::-webkit-details-marker { display: none; }
+.pantry-row:hover { background: var(--paper-2); }
+.pantry-item[open] .pantry-row:hover { background: transparent; }
+.pantry-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.pantry-row .name { font-weight: 700; flex: 1; min-width: 110px; }
+.pantry-row .amount {
   font-family: 'Kalam', cursive;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ink-soft);
+  white-space: nowrap;
 }
-.pantry-item .note {
+.pantry-row .exp {
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+/* A hair darker than --hl-ink: that token clears AA on the --hl *fill*, but the
+   exp text sits on lighter paper, where #8a6a0a lands at 4.49 (just under). */
+.pantry-row .exp.soon    { color: #7a5c06; font-weight: 700; }
+.pantry-row .exp.expired { color: var(--danger); font-weight: 700; }
+.pantry-row .note {
   font-family: 'Kalam', cursive;
   font-size: 12px;
   color: var(--ink-soft);
   font-style: italic;
-  flex-basis: 100%;
 }
-.pantry-item form { margin: 0; }
-.pantry-item .edit-form {
-  display: flex;
-  gap: 4px;
+/* Disclosure affordance: a persistent caret (the at-rest "this row opens" cue,
+   so it reads on touch too) mirroring the filter rail's ▾, plus an "edit" label
+   that fades in on hover/focus/open so the action is named without 30 labels
+   shouting at rest. */
+.pantry-row .row-edit {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
 }
-.pantry-item .edit-form input[type="number"] { width: 70px; min-width: 0; }
-.pantry-item .edit-form input[type="text"] { width: 80px; min-width: 0; }
+.pantry-row .row-edit-text {
+  font-family: 'Kalam', cursive;
+  font-size: 12px;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.pantry-row:hover .row-edit-text,
+.pantry-row:focus-visible .row-edit-text,
+.pantry-item[open] .row-edit-text { opacity: 1; }
+.pantry-row .row-caret {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-soft);
+  transition: transform 0.15s ease;
+}
+.pantry-item[open] .row-caret { transform: rotate(180deg); }
+.pantry-item[open] .row-edit-text,
+.pantry-item[open] .row-caret { color: var(--accent-ink); }
+
+.pantry-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 0 14px 12px 36px;
+}
+.pantry-edit form { margin: 0; }
+.pantry-edit .edit-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.pantry-edit .edit-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--ink-soft);
+  gap: 3px;
+}
+.pantry-edit .edit-form input[type="number"] { width: 80px; min-width: 0; }
 .btn-save {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #5a3b14;
-  padding: 4px 12px;
+  color: var(--accent-ink);
+  padding: 5px 14px;
   font-size: 13px;
   box-shadow: 2px 2px 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pantry-row,
+  .pantry-row .row-caret,
+  .pantry-row .row-edit-text { transition: none; }
 }
 
 /* Filters card (shared: recipe filter rail, pantry add card) */
@@ -995,6 +1294,7 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   gap: 14px;
 }
 .plan-card {
+  position: relative;
   border: 2px solid var(--line);
   border-radius: 10px;
   background: var(--paper);
@@ -1003,15 +1303,29 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: transform .12s ease, box-shadow .12s ease;
 }
-.plan-card header { display: flex; justify-content: space-between; align-items: baseline; }
+/* The whole card opens the plan (stretched title link); the action buttons
+   sit above the overlay so Shopping list / Print / Clone still work. */
+.plan-card:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--line); }
+.plan-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .plan-card .week {
   font-family: 'Caveat', cursive;
   font-size: 26px;
   font-weight: 700;
+  border-bottom: none;
 }
+.plan-card .week:hover { color: var(--accent); }
+.plan-card .week::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.plan-card .actions { position: relative; z-index: 1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .plan-card .notes { color: var(--ink-soft); font-size: 13px; font-style: italic; }
-.plan-card .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.week-exact {
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  margin-left: 4px;
+}
 
 .status-draft,
 .status-confirmed {
@@ -1021,8 +1335,8 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   padding: 2px 10px;
   border-radius: 999px;
 }
-.status-draft { background: var(--hl); border-color: #c9a635; }
-.status-confirmed { background: var(--accent-soft); border-color: var(--accent); color: #5a3b14; }
+.status-draft { background: var(--hl); border-color: var(--hl-line); }
+.status-confirmed { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 
 .plan-grid {
   border: 2px solid var(--line);
@@ -1033,9 +1347,9 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
 }
 .plan-grid .plan-row {
   display: grid;
-  grid-template-columns: 110px 1fr 1fr 100px 90px;
-  gap: 10px;
-  padding: 10px 14px;
+  grid-template-columns: 120px minmax(0, 1fr) 96px 84px 40px;
+  gap: 12px;
+  padding: 11px 16px;
   border-bottom: 1.5px dashed var(--line-soft);
   align-items: center;
 }
@@ -1048,6 +1362,24 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   color: var(--ink-soft);
   letter-spacing: 0.5px;
 }
+
+/* Row hierarchy: the recipe is the content, the day is a quiet tag beside it. */
+.cell-when { display: flex; flex-direction: column; line-height: 1.15; }
+.when-day { font-family: 'Kalam', cursive; font-weight: 700; font-size: 14px; color: var(--ink); }
+.when-slot { font-size: 12px; color: var(--ink-soft); }
+.cell-recipe a {
+  font-family: 'Kalam', cursive;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  border-bottom: 1.5px dashed transparent;
+}
+.cell-recipe a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.cell-serv, .cell-time { font-size: 14px; color: var(--ink-soft); }
+.cell-dash { color: var(--ink-faint); }
+.cell-k { display: none; }          /* desktop: the header row names the columns */
+.cell-remove { justify-self: end; }
+.plan-row.head .cell-recipe a { font: inherit; color: inherit; }
 
 .shopping-list {
   list-style: none;
@@ -1084,7 +1416,74 @@ a.stat-card:hover { border-bottom-color: var(--accent); }
   font-family: 'Kalam', cursive;
 }
 .shopping-list.covered li { background: var(--paper-2); }
-.shopping-list.unmapped li { background: #fff9e6; }
+.shopping-list.unmapped li { background: var(--hl-soft); }
+
+/* Buy rows are checkable; the ingredient name leads, provenance is demoted. */
+.shop-check { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
+.shop-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-bottom: none;
+}
+.buy .shop-name .tick {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  position: relative;
+}
+.shop-check:checked + .shop-name .tick {
+  background: var(--good);
+  border-color: var(--good-line);
+}
+.shop-check:checked + .shop-name .tick::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.shop-check:checked + .shop-name { color: var(--ink-faint); text-decoration: line-through; }
+.shop-check:focus-visible + .shop-name .tick {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Provenance: one recipe inline, several behind a quiet disclosure. */
+details.used-in { margin-left: auto; }
+details.used-in > summary {
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+  width: max-content;
+  border-bottom: 1.5px dashed var(--line-soft);
+}
+details.used-in > summary::-webkit-details-marker { display: none; }
+details.used-in[open] > summary { color: var(--accent); border-bottom-color: var(--accent); }
+details.used-in > ul {
+  list-style: disc;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-family: 'Kalam', cursive;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.shopping-list details.used-in > ul li {
+  display: list-item;
+  padding: 0;
+  border: none;
+  background: none;
+}
 
 .empty {
   color: var(--ink-soft);
@@ -1124,9 +1523,6 @@ pre.instructions {
   box-shadow: var(--shadow);
 }
 
-.quick-start ul { padding-left: 20px; font-family: 'Kalam', cursive; }
-.quick-start li { margin: 6px 0; }
-
 .foot {
   text-align: center;
   color: var(--ink-soft);
@@ -1151,7 +1547,72 @@ pre.instructions {
 /* responsive */
 @media (max-width: 800px) {
   .browser-layout { grid-template-columns: 1fr; }
-  .filter-rail { position: static; }
+  /* On mobile the rail becomes a collapsible disclosure so the recipe grid is
+     the first thing on screen, not a wall of filters. The form itself goes
+     chrome-less; the summary bar and the body each carry their own card. */
+  .filter-rail {
+    position: static;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+  /* Checkbox stays focusable (Tab + Space) but visually collapsed; the label is
+     the visible control and shows the focus ring on its behalf. */
+  .filters-toggle-cb {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .filter-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 10px 16px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+    font-family: 'Caveat', cursive;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+    user-select: none;
+  }
+  .filter-summary-meta {
+    font-family: 'Kalam', cursive;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
+  .filter-summary-caret {
+    margin-left: auto;
+    font-size: 16px;
+    transition: transform .15s ease;
+  }
+  .filters-toggle-cb:focus-visible ~ .filter-summary {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .filters-toggle-cb:checked ~ .filter-summary .filter-summary-caret {
+    transform: rotate(180deg);
+  }
+  /* Collapsed by default; the checked toggle reveals the body as its own card. */
+  .filter-rail-body {
+    display: none;
+    margin-top: 10px;
+    padding: 16px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+  }
+  .filters-toggle-cb:checked ~ .filter-rail-body { display: flex; }
   .detail-grid {
     grid-template-columns: 1fr;
     display: flex;
@@ -1161,17 +1622,49 @@ pre.instructions {
     position: static;
     max-height: none;
     overflow: visible;
-    order: 5;
   }
+  /* Mobile order: lead with the recipe, then the commit action (Add to plan),
+     then ingredient coverage; tags drop to the bottom (lowest-value metadata).
+     The old order put .detail-actions below the whole ingredient list. */
   .detail-main { display: contents; }
   .detail-main .recipe-hero,
   .detail-main .hero-placeholder { order: 1; }
   .detail-main .detail-title { order: 2; }
   .detail-main .detail-chips { order: 3; }
-  .detail-main .tag-list { order: 4; }
-  .detail-main .detail-actions { order: 6; }
+  .detail-main .detail-actions { order: 4; }
+  .ingredient-card { order: 5; }
+  .detail-main .tag-block { order: 6; }
   .recipe-hero { height: 200px; }
   .detail-title { font-size: 28px; }
-  .plan-grid .plan-row { grid-template-columns: 70px 1fr 1fr; }
-  .plan-grid .plan-row > :nth-child(n+4) { display: none; }
+  /* Stack each plan row into a meal card so the recipe, its meta, AND the
+     remove control all survive on a phone (the old rule hid columns 4-6,
+     which silently dropped Remove). */
+  .plan-grid .plan-row.head { display: none; }
+  .plan-grid .plan-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "recipe remove"
+      "when   when"
+      "serv   time";
+    gap: 4px 12px;
+    padding: 12px 14px;
+    align-items: start;
+  }
+  .plan-grid .cell-recipe { grid-area: recipe; }
+  .plan-grid .cell-remove { grid-area: remove; align-self: start; }
+  .plan-grid .cell-when {
+    grid-area: when;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .plan-grid .cell-serv { grid-area: serv; }
+  .plan-grid .cell-time { grid-area: time; justify-self: end; }
+  .plan-grid .cell-k { display: inline; color: var(--ink-faint); }
+  .plan-grid .when-slot::before { content: "· "; color: var(--ink-faint); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The disclosure caret still flips state, just without the rotate tween. */
+  .filter-summary-caret { transition: none; }
 }

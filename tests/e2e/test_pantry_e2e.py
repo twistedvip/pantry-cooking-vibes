@@ -33,6 +33,9 @@ def test_pantry_add_then_remove_round_trips(live_server, page):
     pantry_row = page.locator(".pantry-item").filter(has_text="salt")
     assert pantry_row.count() >= 1, "salt should now appear in 'In your pantry'"
 
+    # Rows are read-first <details>: the Remove action lives inside, revealed
+    # only when the row is opened. Expand it before clicking.
+    pantry_row.first.locator("summary").click()
     page.once("dialog", lambda d: d.accept())
     pantry_row.first.locator('form[action$="/delete"] button').click()
     page.wait_for_load_state("networkidle")

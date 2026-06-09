@@ -14,18 +14,18 @@
   {% for p in plans %}
   <li class="plan-card">
     <header>
-      <a href="/plans/{{ p.id }}" class="week">Week of {{ p.week_of }}</a>
+      {% set wl = p.week_of | weeklabel(current_sunday.isoformat()) %}
+      <a href="/plans/{{ p.id }}" class="week">{{ wl }}{% if not wl.startswith('Week of') %} <span class="week-exact">{{ p.week_of | humandate }}</span>{% endif %}</a>
       <span class="status-{{ p.status }}">{{ p.status }}</span>
     </header>
-    <div class="row gap-8 wrap">
+    <div class="row gap-8 wrap meta-line">
       <span class="chip">{{ p.item_count }} meal{{ '' if p.item_count == 1 else 's' }}</span>
       <span class="coverage-chip chip acc">{{ p.coverage.percent }}% pantry</span>
-      {% if p.created_at %}<span class="label">created {{ p.created_at }}</span>{% endif %}
+      {% if p.created_at %}<span class="label">created {{ p.created_at | humanstamp }}</span>{% endif %}
     </div>
     {% if p.notes %}<div class="notes">{{ p.notes }}</div>{% endif %}
     <div class="actions">
-      <a class="btn" href="/plans/{{ p.id }}">Open →</a>
-      <a class="btn btn-link" href="/plans/{{ p.id }}/shopping">Shopping list</a>
+      <a class="btn" href="/plans/{{ p.id }}/shopping">Shopping list</a>
       <a class="btn btn-link" href="/plans/{{ p.id }}/print">Print</a>
       <form class="fav-toggle" method="post" action="/plans/{{ p.id }}/favorite">
         <input type="hidden" name="favorite" value="{{ '0' if p.is_favorite else '1' }}">

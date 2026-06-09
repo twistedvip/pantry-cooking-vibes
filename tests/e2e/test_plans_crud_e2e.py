@@ -14,11 +14,17 @@ from pantry_cooking_vibes.db import connect
 pytestmark = pytest.mark.e2e
 
 
-def test_plans_list_shows_seeded_plan(live_server, page):
+def test_plans_list_shows_seeded_plan(live_server, page, e2e_db):
+    with connect(e2e_db) as conn:
+        plan_id = conn.execute("SELECT id FROM meal_plans WHERE week_of = '2026-05-04'").fetchone()[
+            "id"
+        ]
+
     page.goto(f"{live_server}/plans")
     page.wait_for_load_state("networkidle")
 
-    card = page.locator("li.plan-card").filter(has_text="2026-05-04")
+    # Dates are humanized on the card, so identify the seed plan by its href.
+    card = page.locator(f'li.plan-card:has(a[href="/plans/{plan_id}"])')
     assert card.count() == 1
     text = card.first.inner_text().lower()
     assert "2 meals" in text
@@ -33,8 +39,10 @@ def test_create_plan_redirects_to_plan_detail(live_server, page):
     page.wait_for_load_state("networkidle")
 
     assert re.search(r"/plans/\d+$", page.url), f"expected /plans/<id>, got {page.url}"
+    # "+ New plan for this week" creates the current-week plan, so the humanized
+    # title is the relative "This week ..." label (not the absolute "Week of").
     h1 = page.locator("h1").first.inner_text()
-    assert h1.startswith("Week of "), f"detail h1 missing: {h1!r}"
+    assert h1.startswith("This week"), f"detail h1 missing: {h1!r}"
 
 
 def _is_plan_favorite(conn, plan_id: int) -> bool:

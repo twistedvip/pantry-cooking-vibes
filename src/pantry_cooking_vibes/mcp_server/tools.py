@@ -214,6 +214,38 @@ def list_recipe_sources(*, db_path: Path | None = None) -> list[str]:
     return [r["source"] for r in rows]
 
 
+def pantry_coverage_for_recipes(
+    recipe_ids: list[int], *, db_path: Path | None = None
+) -> dict[int, dict]:
+    """Per-recipe pantry coverage for a batch of recipes, in one query.
+
+    For each recipe, counts its *mapped* ingredients (``canonical_id`` not null)
+    and how many of those canonical ingredients are currently in the pantry.
+    Unmapped ingredients are ignored, mirroring ``pantry_only`` in
+    :func:`search_recipes`. Returns ``{recipe_id: {"have": int, "mapped": int}}``
+    only for recipes that have at least one mapped ingredient; a missing id means
+    "no coverage signal" (no mapped ingredients), which callers render as no badge.
+    """
+    ids = [int(r) for r in recipe_ids]
+    if not ids:
+        return {}
+    db = db_path or DB_PATH
+    placeholders = ",".join("?" * len(ids))
+    sql = (
+        # placeholders is only ? marks; the ids go through as bound params
+        "SELECT ri.recipe_id AS recipe_id, "  # noqa: S608
+        "COUNT(DISTINCT ri.canonical_id) AS mapped, "
+        "COUNT(DISTINCT CASE WHEN ri.canonical_id IN (SELECT canonical_id FROM pantry) "
+        "  THEN ri.canonical_id END) AS have "
+        "FROM recipe_ingredients ri "
+        f"WHERE ri.recipe_id IN ({placeholders}) AND ri.canonical_id IS NOT NULL "
+        "GROUP BY ri.recipe_id"
+    )
+    with connect(db) as conn:
+        rows = conn.execute(sql, ids).fetchall()
+    return {int(r["recipe_id"]): {"have": int(r["have"]), "mapped": int(r["mapped"])} for r in rows}
+
+
 def get_recipe(recipe_id: int, *, db_path: Path | None = None) -> dict | None:
     """Fetch a recipe with its full ingredient list (canonical names joined) and tags."""
     db = db_path or DB_PATH

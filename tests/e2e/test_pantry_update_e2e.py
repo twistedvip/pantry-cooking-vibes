@@ -27,6 +27,8 @@ def test_pantry_update_changes_quantity_and_unit(live_server, page, e2e_db):
     page.wait_for_load_state("networkidle")
 
     row = page.locator(".pantry-item").filter(has_text="olive oil").first
+    # Read-first <details> row: open it to reveal the edit form before filling.
+    row.locator("summary").click()
     edit = row.locator("form.edit-form")
     edit.locator('input[name="quantity"]').fill("2.5")
     edit.locator('select[name="unit"]').select_option("ml")

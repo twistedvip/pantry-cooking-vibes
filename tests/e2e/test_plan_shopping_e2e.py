@@ -13,14 +13,26 @@ from __future__ import annotations
 
 import pytest
 
+from pantry_cooking_vibes.db import connect
+
 pytestmark = pytest.mark.e2e
 
 
-def test_plan_detail_lists_seeded_recipes(live_server, page):
+def _seed_plan_id(e2e_db) -> int:
+    with connect(e2e_db) as conn:
+        return conn.execute("SELECT id FROM meal_plans WHERE week_of = '2026-05-04'").fetchone()[
+            "id"
+        ]
+
+
+def test_plan_detail_lists_seeded_recipes(live_server, page, e2e_db):
+    plan_id = _seed_plan_id(e2e_db)
     page.goto(f"{live_server}/plans")
     page.wait_for_load_state("networkidle")
 
-    page.get_by_role("link", name="2026-05-04").first.click()
+    # Card titles are humanized ("Week of May 4" / "This week"), so target the
+    # seed plan by its stable href instead of the date text.
+    page.locator(f'li.plan-card a[href="/plans/{plan_id}"]').first.click()
     page.wait_for_load_state("networkidle")
 
     body = page.content()
@@ -29,9 +41,11 @@ def test_plan_detail_lists_seeded_recipes(live_server, page):
     assert "mon" in body.lower() and "dinner" in body.lower()
 
 
-def test_shopping_list_separates_needed_from_covered(live_server, page):
+def test_shopping_list_separates_needed_from_covered(live_server, page, e2e_db):
+    plan_id = _seed_plan_id(e2e_db)
     page.goto(f"{live_server}/plans")
-    page.get_by_role("link", name="2026-05-04").first.click()
+    page.wait_for_load_state("networkidle")
+    page.locator(f'li.plan-card a[href="/plans/{plan_id}"]').first.click()
     page.wait_for_load_state("networkidle")
 
     page.get_by_role("link", name="Shopping list →").click()

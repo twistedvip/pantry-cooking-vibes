@@ -1,38 +1,130 @@
 {% extends "base.html" %}
 {% block title %}Pantry Cooking Vibes — Home{% endblock %}
 {% block content %}
-<h1>Overview</h1>
-<p class="screen-sub">Your kitchen at a glance — browse recipes, check the pantry, review the week's plans.</p>
+<h1>In the kitchen</h1>
 
-<div class="stat-grid">
-  <a class="stat-card" href="/recipes">
-    <span class="stat-num">{{ recipe_count }}</span>
-    <span class="stat-label">Recipes</span>
-  </a>
-  <a class="stat-card" href="/pantry">
-    <span class="stat-num">{{ pantry_count }}</span>
-    <span class="stat-label">Pantry items</span>
-  </a>
-  <a class="stat-card" href="/plans">
-    <span class="stat-num">{{ plan_count }}</span>
-    <span class="stat-label">Meal Plans</span>
-  </a>
-  <div class="stat-card">
-    <span class="stat-num">{{ canonical_count }}</span>
-    <span class="stat-label">Canonical ingredients</span>
-  </div>
-</div>
-
-<section class="card quick-start mt-24">
-  <h2>Quick start</h2>
-  <ul>
-    <li><a href="/recipes">Browse recipes</a> — search by name, cooking time, or tag.</li>
-    <li><a href="/pantry">Manage your pantry</a> — track what you have on hand.</li>
-    <li><a href="/plans">Review meal plans</a> — see what's planned and what to shop for.</li>
-  </ul>
-  <p class="hint">
-    To add recipes or create plans, use <code>meal-cli</code> or talk to Claude via the
-    MCP server (<code>meal-cli serve-mcp</code>).
-  </p>
+{% if recipe_count == 0 %}
+{# First run: nothing imported yet. One job — teach the path that unlocks the
+   rest of the app. No empty decision sections, no wall of zeros. #}
+<p class="screen-sub">Let's get your recipes in. Once they're here, this page shows what you can cook, what to use up, and where the week stands.</p>
+<section class="welcome box pad">
+  <h2>Start by importing recipes</h2>
+  <p>Recipes live in SQLite and arrive through the CLI. From your terminal:</p>
+  <pre class="instructions">uv run meal-cli import &lt;url&gt;        # one recipe from a page
+uv run meal-cli ingest &lt;file.jsonl&gt;   # a batch you've scraped</pre>
+  <p class="hint">Rather talk it through? Claude can add recipes for you over the MCP server (<code>meal-cli serve-mcp</code>). Full setup is in the project <code>README</code>.</p>
 </section>
+
+{% else %}
+<p class="screen-sub">What you can cook now, what to use up, and where this week's plan stands.</p>
+<p class="glance">
+  <a href="/recipes"><strong>{{ "{:,}".format(recipe_count) }}</strong> recipe{{ '' if recipe_count == 1 else 's' }}</a>
+  <span class="glance-sep" aria-hidden="true">·</span>
+  <a href="/pantry"><strong>{{ "{:,}".format(pantry_count) }}</strong> in your pantry</a>
+  <span class="glance-sep" aria-hidden="true">·</span>
+  <a href="/plans"><strong>{{ plan_count }}</strong> meal plan{{ '' if plan_count == 1 else 's' }}</a>
+</p>
+
+{# ---- Ready to cook (primary decision) ---- #}
+<section class="home-section" aria-labelledby="h-ready">
+  <div class="home-section-head">
+    <h2 id="h-ready">Ready to cook</h2>
+    {% if ready %}<a class="see-all" href="/recipes?pantry_only=1">See all →</a>{% endif %}
+  </div>
+
+  {% if pantry_empty %}
+  <div class="nudge">
+    <p>Tell me what's in your kitchen and I'll show you the recipes you can make tonight, no shopping required.</p>
+    <a class="btn primary" href="/pantry">Stock the pantry</a>
+  </div>
+  {% elif ready %}
+  <p class="section-sub">Recipes you have every matched ingredient for, right now.</p>
+  <ul class="recipe-grid home-ready">
+    {% for r in ready %}
+    <li class="recipe-card">
+      <a href="/recipes/{{ r.id }}">
+        {% if r.image_url %}
+        <img class="recipe-thumb" src="{{ r.image_url }}" alt="" loading="lazy">
+        {% else %}
+        <div class="recipe-thumb placeholder">🍽</div>
+        {% endif %}
+        <div class="recipe-body">
+          <h3 title="{{ r.name }}">{{ r.name }}</h3>
+          <div class="meta">
+            {% if r.coverage and r.coverage.mapped %}
+            <span class="coverage full" title="You have all {{ r.coverage.mapped }} of this recipe's matched ingredients">✓ have all</span>
+            {% endif %}
+            {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
+            {% if r.servings %}<span>🍽 {{ r.servings }} servings</span>{% endif %}
+          </div>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="nudge soft">
+    <p>Nothing matches your whole pantry just yet. A few more staples, or a quick browse, and dinner's sorted.</p>
+    <a class="btn" href="/recipes">Browse recipes</a>
+  </div>
+  {% endif %}
+</section>
+
+{# ---- Secondary band: use-it-soon + this-week, side by side ---- #}
+<div class="home-band">
+  <section class="home-section" aria-labelledby="h-soon">
+    <div class="home-section-head">
+      <h2 id="h-soon">Use it soon</h2>
+      {% if expiring %}<a class="see-all" href="/pantry">Pantry →</a>{% endif %}
+    </div>
+    {% if expiring %}
+    <ul class="soon-list">
+      {% for p in expiring %}
+      <li>
+        <span class="freshness {{ p.freshness }}" title="{% if p.freshness == 'expired' %}expired{% else %}expiring soon{% endif %}"></span>
+        <span class="soon-name">{{ p.canonical_name }}</span>
+        {% if p.quantity_display %}<span class="soon-meta">{{ p.quantity_display }}{% if p.unit %} {{ p.unit }}{% endif %}</span>{% endif %}
+        <span class="exp {{ p.freshness }}">{% if p.freshness == 'expired' %}expired {% else %}exp {% endif %}{{ p.expires_at | humandate }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="section-empty">Nothing on the clock. Everything in your pantry is good for now.</p>
+    {% endif %}
+  </section>
+
+  <section class="home-section" aria-labelledby="h-week">
+    <div class="home-section-head">
+      <h2 id="h-week">This week</h2>
+      {% if week_plan %}<a class="see-all" href="/plans/{{ week_plan.id }}">Open →</a>{% endif %}
+    </div>
+    {% if week_plan %}
+    <div class="week-summary">
+      <div class="row gap-8 wrap">
+        <span class="chip">{{ week_plan['items']|length }} meal{{ '' if week_plan['items']|length == 1 else 's' }}</span>
+        <span class="coverage-chip chip acc">{{ week_plan['coverage'].percent }}% pantry</span>
+      </div>
+      {% if week_plan['items'] %}
+      <ul class="week-meals">
+        {% for it in week_plan['items'][:3] %}<li>{{ it.recipe_name }}</li>{% endfor %}
+      </ul>
+      {% if week_plan['items']|length > 3 %}<p class="hint">+{{ week_plan['items']|length - 3 }} more</p>{% endif %}
+      <div class="row gap-8 wrap">
+        <a class="btn" href="/plans/{{ week_plan.id }}/shopping">Shopping list</a>
+      </div>
+      {% else %}
+      <p class="section-empty">This week's plan is empty. Add a recipe from any recipe page.</p>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="nudge soft">
+      <p>No plan for this week yet.</p>
+      <form method="post" action="/plans">
+        <button class="btn primary" type="submit">Start this week's plan</button>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endif %}
 {% endblock %}
