@@ -1544,6 +1544,43 @@ pre.instructions {
 .mapping-table .actions-cell { white-space: nowrap; display: flex; gap: 4px; flex-wrap: wrap; }
 .pager { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
 
+/* Numbered pager (recipes browse). Page-number links compose .btn — the
+   shared drawn hover/press vocabulary — and .page-num only reshapes the pill
+   into a square tile. The current page is a static span (no .btn, so no
+   hover lift), inverted to ink like an active nav pill. */
+.pager-pages { justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+.page-list {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.page-num {
+  font-family: 'Kalam', cursive;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-block;
+  min-width: 34px;
+  padding: 7px 8px;
+  text-align: center;
+  border-radius: 8px;
+}
+.page-num.current {
+  background: var(--ink);
+  color: var(--paper);
+  border: 1.5px solid var(--line);
+  box-shadow: 1.5px 1.5px 0 var(--line);
+  font-weight: 700;
+}
+.page-gap {
+  font-family: 'Kalam', cursive;
+  color: var(--ink-soft);
+  padding: 0 2px;
+}
+
 /* responsive */
 @media (max-width: 800px) {
   .browser-layout { grid-template-columns: 1fr; }

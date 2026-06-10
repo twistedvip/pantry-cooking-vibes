@@ -92,7 +92,13 @@
     {% if recipes %}
     <h2 class="visually-hidden">Recipe results</h2>
     <div class="toolbar">
-      <p class="result-count">{{ recipes|length }} result{{ '' if recipes|length == 1 else 's' }}.</p>
+      <p class="result-count">
+        {%- if total_pages > 1 -%}
+        Showing {{ '{:,}'.format((page - 1) * limit + 1) }}–{{ '{:,}'.format((page - 1) * limit + recipes|length) }} of {{ '{:,}'.format(total) }} recipes
+        {%- else -%}
+        {{ total }} result{{ '' if total == 1 else 's' }}.
+        {%- endif -%}
+      </p>
       <span class="label">{% if q %}sorted by best match{% else %}top-rated first{% endif %}</span>
     </div>
     <ul class="recipe-grid">
@@ -133,6 +139,32 @@
       </li>
       {% endfor %}
     </ul>
+    {% if total_pages > 1 %}
+    {# Page links rebuild the full current query (filters, sources, limit) with
+       only `page` swapped, so deep pages stay shareable. Submitting the filter
+       form drops `page` and naturally resets to page 1. #}
+    <nav class="pager pager-pages" aria-label="Recipe result pages">
+      {% if page > 1 %}
+      <a class="btn" href="?{{ request.url.include_query_params(page=page - 1).query }}">← Prev</a>
+      {% endif %}
+      <ol class="page-list">
+        {% for p in page_window %}
+        {% if p is none %}
+        {# role=presentation: the decorative gap must not count toward the
+           list size assistive tech announces. #}
+        <li class="page-gap" role="presentation" aria-hidden="true">…</li>
+        {% elif p == page %}
+        <li><span class="page-num current" aria-current="page">{{ p }}</span></li>
+        {% else %}
+        <li><a class="btn page-num" href="?{{ request.url.include_query_params(page=p).query }}" aria-label="Page {{ p }}">{{ p }}</a></li>
+        {% endif %}
+        {% endfor %}
+      </ol>
+      {% if page < total_pages %}
+      <a class="btn" href="?{{ request.url.include_query_params(page=page + 1).query }}">Next →</a>
+      {% endif %}
+    </nav>
+    {% endif %}
     {% else %}
     <div class="empty">
       <p>No recipes match these filters.</p>

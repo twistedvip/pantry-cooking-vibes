@@ -105,6 +105,72 @@ def test_search_recipes_limit_zero_returns_one(seeded_db_path):
     assert len(rows) == 1
 
 
+def test_search_recipes_offset_pages_through_results(seeded_db_path):
+    everything = tools.search_recipes(db_path=seeded_db_path)
+    page2 = tools.search_recipes(limit=1, offset=1, db_path=seeded_db_path)
+    assert [r["id"] for r in page2] == [everything[1]["id"]]
+
+
+def test_search_recipes_offset_past_end_returns_empty(seeded_db_path):
+    assert tools.search_recipes(offset=999, db_path=seeded_db_path) == []
+
+
+def test_search_recipes_negative_offset_treated_as_zero(seeded_db_path):
+    everything = tools.search_recipes(db_path=seeded_db_path)
+    assert tools.search_recipes(offset=-5, db_path=seeded_db_path) == everything
+
+
+def test_search_recipes_page_total_ignores_limit(seeded_db_path):
+    data = tools.search_recipes_page(limit=1, db_path=seeded_db_path)
+    assert len(data["items"]) == 1
+    assert data["total"] == 2
+    assert data["offset"] == 0
+
+
+def test_search_recipes_page_total_respects_filters(seeded_db_path):
+    assert tools.search_recipes_page(query="soup", db_path=seeded_db_path)["total"] == 1
+    assert tools.search_recipes_page(tags=["soup"], db_path=seeded_db_path)["total"] == 1
+    assert tools.search_recipes_page(sources=["manual"], db_path=seeded_db_path)["total"] == 1
+    assert tools.search_recipes_page(max_time_min=30, db_path=seeded_db_path)["total"] == 1
+
+
+def test_search_recipes_page_unknown_ingredient_is_empty(seeded_db_path):
+    data = tools.search_recipes_page(ingredients=["zzznotacanonicalzzz"], db_path=seeded_db_path)
+    assert data == {"items": [], "total": 0, "offset": 0}
+
+
+def test_search_recipes_page_offset_past_end_clamps_to_last_page(seeded_db_path):
+    # search_recipes returns [] past the end (iteration contract); the page
+    # variant instead lands on the final page and reports the effective offset.
+    data = tools.search_recipes_page(limit=1, offset=999, db_path=seeded_db_path)
+    assert data["total"] == 2
+    assert data["offset"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["id"] == tools.search_recipes(db_path=seeded_db_path)[1]["id"]
+
+
+def test_search_recipes_fts_pagination_covers_all_matches_exactly_once(db_path):
+    """FTS rank ties (identical text, no rating) must not skip/repeat rows
+    across pages — the r.id tiebreaker makes the order stable."""
+    from pantry_cooking_vibes.db import connect
+
+    with connect(db_path) as conn:
+        for i in range(5):
+            conn.execute(
+                "INSERT INTO recipes (source, source_id, name, instructions_md) "
+                "VALUES ('manual', ?, ?, 'Stir the tieworthy pot.')",
+                (f"tie-{i}", f"Tieworthy Stew {i}"),
+            )
+
+    all_ids = {r["id"] for r in tools.search_recipes(query="tieworthy", db_path=db_path)}
+    assert len(all_ids) == 5
+    paged_ids = []
+    for offset in range(0, 5, 2):
+        page = tools.search_recipes(query="tieworthy", limit=2, offset=offset, db_path=db_path)
+        paged_ids.extend(r["id"] for r in page)
+    assert sorted(paged_ids) == sorted(all_ids)
+
+
 def test_search_recipes_sources_filter(seeded_db_path):
     # Seeded fixture has one 'manual' and one 'url' recipe.
     manual_only = tools.search_recipes(sources=["manual"], db_path=seeded_db_path)
