@@ -17,6 +17,7 @@
     {% if selected_sources %}{% set ns.active = ns.active + 1 %}{% endif %}
     {% if favorites_only %}{% set ns.active = ns.active + 1 %}{% endif %}
     {% if pantry_only %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if sort and sort != 'availability' %}{% set ns.active = ns.active + 1 %}{% endif %}
     {# Checkbox-driven disclosure: invisible but focusable, toggled by the label
        below. Drives the mobile collapse via CSS only (see .filter-rail-body).
        Pre-checked when filters are active so applied state stays visible. #}
@@ -68,6 +69,14 @@
     </fieldset>
     {% endif %}
     <div class="rail-group">
+      <label class="label" for="f-sort">sort by</label>
+      <select id="f-sort" name="sort">
+        {% for value, label in sort_choices %}
+        <option value="{{ value }}" {% if value == sort %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="rail-group">
       <label class="label" for="f-limit">result limit</label>
       <select id="f-limit" name="limit">
         {% for c in limit_choices %}
@@ -99,7 +108,11 @@
         {{ total }} result{{ '' if total == 1 else 's' }}.
         {%- endif -%}
       </p>
-      <span class="label">{% if q %}sorted by best match{% else %}top-rated first{% endif %}</span>
+      <span class="label">sorted by
+        {%- if sort == 'rating' %} top-rated first
+        {%- elif sort == 'relevance' %} {% if q %}best match{% else %}top-rated first{% endif %}
+        {%- else %} most ingredients on hand{% if q %} (best match first){% endif %}
+        {%- endif %}</span>
     </div>
     <ul class="recipe-grid">
       {% for r in recipes %}

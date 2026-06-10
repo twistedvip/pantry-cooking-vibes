@@ -91,6 +91,57 @@ def _canonical_id_exists_clause(ids: list[int]) -> str:
     )
 
 
+SORT_VALUES = ("availability", "rating", "relevance")
+DEFAULT_SORT = "relevance"
+# r.id tiebreaker everywhere: bm25 rank and rating tie across many bulk-ingested
+# rows, and SQLite's order among ties is unstable between queries — without a
+# unique key, LIMIT/OFFSET pages can skip or repeat recipes.
+_FAV_RATING_ORDER = "is_favorite DESC, r.rating DESC NULLS LAST, r.id"
+
+
+def _availability_canonical_ids(conn: sqlite3.Connection) -> list[int]:
+    """Canonical ids the user effectively "has": pantry + ingredients required by
+    recipes in current/future meal plans.
+
+    "Current/future" means ``meal_plans.week_of >= this week's Sunday`` (draft or
+    confirmed) — ingredients you already own or are already committed to buying.
+    Past plans don't count. Returns a de-duplicated list (UNION); empty when the
+    pantry is empty and no upcoming plan has mapped ingredients.
+    """
+    rows = conn.execute(
+        "SELECT canonical_id FROM pantry "
+        "UNION "
+        "SELECT ri.canonical_id "
+        "FROM meal_plan_items mpi "
+        "JOIN meal_plans mp ON mp.id = mpi.plan_id "
+        "JOIN recipe_ingredients ri ON ri.recipe_id = mpi.recipe_id "
+        "WHERE mp.week_of >= ? AND ri.canonical_id IS NOT NULL",
+        (current_sunday().isoformat(),),
+    ).fetchall()
+    return [r["canonical_id"] for r in rows]
+
+
+def _order_clause(sort: str, has_query: bool, has_avail: bool) -> str:
+    """ORDER BY for a recipe search, per sort mode (see issue #53).
+
+    - ``rating``: top-rated first, ignoring FTS rank even when a query is present.
+    - ``relevance`` (legacy default): FTS rank when a query is present, else rating.
+    - ``availability``: most on-hand ingredients first; with a query, FTS rank stays
+      primary and on-hand count breaks ties. Falls back to the relevance order when
+      the availability set is empty (no ``have_count`` column to sort on).
+    """
+    if sort == "rating":
+        return f"ORDER BY {_FAV_RATING_ORDER}"
+    if sort == "relevance" or not has_avail:
+        if has_query:
+            return "ORDER BY f.rank, r.rating DESC NULLS LAST, r.id"
+        return f"ORDER BY {_FAV_RATING_ORDER}"
+    # availability, with a non-empty have-set
+    if has_query:
+        return "ORDER BY f.rank, have_count DESC, r.rating DESC NULLS LAST, r.id"
+    return "ORDER BY have_count DESC, is_favorite DESC, r.rating DESC NULLS LAST, r.id"
+
+
 def _recipe_query_parts(
     conn: sqlite3.Connection,
     query: str,
@@ -101,30 +152,49 @@ def _recipe_query_parts(
     ingredients: list[str] | None,
     ingredient_mode: str,
     pantry_only: bool,
-) -> tuple[str, str, list[Any]] | None:
+    sort: str = DEFAULT_SORT,
+) -> tuple[str, str, list[Any], str] | None:
     """Shared FROM/WHERE (+ ORDER BY) builder for search/count over recipes.
 
-    Returns ``(from_where_sql, order_sql, params)``. Returns ``None`` when an
-    ingredient term resolves to no canonical ids — the filter is unsatisfiable
-    and callers short-circuit to zero results.
+    Returns ``(from_where_sql, order_sql, params, select_extra)``. ``select_extra``
+    is an extra SELECT column (the ``have_count`` used by the ``availability`` sort)
+    or ``""``; the COUNT query ignores it. Returns ``None`` when an ingredient term
+    resolves to no canonical ids — the filter is unsatisfiable and callers
+    short-circuit to zero results.
     """
     params: list[Any] = []
-    where: list[str] = []
 
-    if query.strip():
-        from_where = (
-            "FROM recipes_fts f JOIN recipes r ON r.id = f.rowid "
-            "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id "
-            "WHERE recipes_fts MATCH ?"
+    # Availability sort: precompute the "have" id-set and a non-correlated LEFT JOIN
+    # that counts each recipe's matched ingredients. The JOIN lives in FROM (before
+    # WHERE), so its params MUST lead the params list. Empty set → no join, and
+    # _order_clause falls back to the relevance/rating order.
+    join_sql = ""
+    select_extra = ""
+    avail_ids = _availability_canonical_ids(conn) if sort == "availability" else []
+    if avail_ids:
+        placeholders = ",".join("?" * len(avail_ids))  # only ? marks → safe to interpolate
+        join_sql = (
+            f" LEFT JOIN (SELECT ri.recipe_id AS rid, "  # noqa: S608
+            f"COUNT(DISTINCT ri.canonical_id) AS have_count "
+            f"FROM recipe_ingredients ri WHERE ri.canonical_id IN ({placeholders}) "
+            f"GROUP BY ri.recipe_id) av ON av.rid = r.id"
         )
+        select_extra = ", COALESCE(av.have_count, 0) AS have_count"
+        params.extend(avail_ids)
+
+    has_query = bool(query.strip())
+    if has_query:
+        from_clause = (
+            "FROM recipes_fts f JOIN recipes r ON r.id = f.rowid "
+            "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id"
+        )
+        base_where = ["recipes_fts MATCH ?"]
         params.append(_fts5_escape_query(query))
-        # r.id tiebreaker: bm25 rank and rating tie across many bulk-ingested
-        # rows, and SQLite's order among ties is unstable between queries —
-        # without a unique key, LIMIT/OFFSET pages can skip or repeat recipes.
-        order = "ORDER BY f.rank, r.rating DESC NULLS LAST, r.id"
     else:
-        from_where = "FROM recipes r LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id WHERE 1=1"
-        order = "ORDER BY is_favorite DESC, r.rating DESC NULLS LAST, r.id"
+        from_clause = "FROM recipes r LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id"
+        base_where = ["1=1"]
+
+    where: list[str] = []
 
     if max_time_min is not None:
         where.append("r.cooking_time_min IS NOT NULL AND r.cooking_time_min <= ?")
@@ -174,9 +244,9 @@ def _recipe_query_parts(
             "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL)"
         )
 
-    if where:
-        from_where += " AND " + " AND ".join(where)
-    return from_where, order, params
+    order = _order_clause(sort, has_query, bool(avail_ids))
+    from_where = f"{from_clause}{join_sql} WHERE " + " AND ".join(base_where + where)
+    return from_where, order, params, select_extra
 
 
 _RECIPE_SELECT_COLS = (
@@ -212,6 +282,7 @@ def search_recipes(
     ingredient_mode: str = "and",
     pantry_only: bool = False,
     offset: int = 0,
+    sort: str = DEFAULT_SORT,
     *,
     db_path: Path | None = None,
 ) -> list[dict]:
@@ -225,6 +296,10 @@ def search_recipes(
     ``pantry_only=True`` further restricts to recipes whose mapped ingredients
     are all present in the pantry (unmapped ingredients are ignored).
 
+    ``sort`` is one of ``SORT_VALUES``: ``'relevance'`` (default — FTS rank when a
+    query is given, else rating), ``'rating'`` (always top-rated first), or
+    ``'availability'`` (most on-hand ingredients first; see :func:`_order_clause`).
+
     ``offset`` skips that many rows; past the end the result is ``[]``, so
     ``offset += limit`` iteration terminates. UIs that need a total and
     stale-page clamping want :func:`search_recipes_page` instead.
@@ -234,6 +309,8 @@ def search_recipes(
     offset = max(0, int(offset))
     if ingredient_mode not in ("and", "or"):
         raise ValueError("ingredient_mode must be 'and' or 'or'")
+    if sort not in SORT_VALUES:
+        sort = DEFAULT_SORT
 
     with connect(db) as conn:
         parts = _recipe_query_parts(
@@ -246,11 +323,12 @@ def search_recipes(
             ingredients,
             ingredient_mode,
             pantry_only,
+            sort,
         )
         if parts is None:
             return []
-        from_where, order, params = parts
-        sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
+        from_where, order, params, select_extra = parts
+        sql = f"{_RECIPE_SELECT_COLS}{select_extra} {from_where} {order} LIMIT ? OFFSET ?"
         rows = conn.execute(sql, [*params, limit, offset]).fetchall()
     return _rows_to_recipe_dicts(rows)
 
@@ -266,15 +344,16 @@ def search_recipes_page(
     ingredient_mode: str = "and",
     pantry_only: bool = False,
     offset: int = 0,
+    sort: str = DEFAULT_SORT,
     *,
     db_path: Path | None = None,
 ) -> RecipePage:
     """One browse-page query: ``{"items": [...], "total": int, "offset": int}``.
 
-    Same filters as :func:`search_recipes`, but the COUNT and the SELECT run
-    inside one read transaction on one connection, built from the same query
-    parts — the total can never describe a different result set than the rows.
-    An ``offset`` past the end clamps to the final page (a stale bookmark
+    Same filters and ``sort`` modes as :func:`search_recipes`, but the COUNT and
+    the SELECT run inside one read transaction on one connection, built from the
+    same query parts — the total can never describe a different result set than
+    the rows. An ``offset`` past the end clamps to the final page (a stale bookmark
     lands on real results); the returned ``offset`` is the effective one after
     clamping, always a multiple of ``limit``.
     """
@@ -283,6 +362,8 @@ def search_recipes_page(
     offset = max(0, int(offset))
     if ingredient_mode not in ("and", "or"):
         raise ValueError("ingredient_mode must be 'and' or 'or'")
+    if sort not in SORT_VALUES:
+        sort = DEFAULT_SORT
 
     with connect(db) as conn:
         # Explicit read transaction: WAL pins one snapshot for both statements,
@@ -299,17 +380,18 @@ def search_recipes_page(
             ingredients,
             ingredient_mode,
             pantry_only,
+            sort,
         )
         if parts is None:
             return {"items": [], "total": 0, "offset": 0}
-        from_where, order, params = parts
+        from_where, order, params, select_extra = parts
 
         def _count() -> int:
             row = conn.execute(f"SELECT COUNT(*) AS n {from_where}", params).fetchone()
             return int(row["n"])
 
         def _select(off: int) -> list[sqlite3.Row]:
-            sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
+            sql = f"{_RECIPE_SELECT_COLS}{select_extra} {from_where} {order} LIMIT ? OFFSET ?"
             return conn.execute(sql, [*params, limit, off]).fetchall()
 
         if offset == 0:

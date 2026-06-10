@@ -93,6 +93,7 @@ def list_recipes(
     pantry_only: str = Query(
         "", description="Set to 1 to show only recipes whose mapped ingredients are all in pantry"
     ),
+    sort: str = Query("availability", description="Sort order: availability | rating | relevance"),
     # Unlike the filter fields, `page` never arrives as a blank form value —
     # only pager links set it — so native int parsing (422 on garbage) is fine.
     page: int = Query(1, ge=1, description="1-based result page"),
@@ -104,6 +105,9 @@ def list_recipes(
     favorites_only = fav == "1"
     pantry_only_val = pantry_only == "1"
     mode = ingredient_mode if ingredient_mode in ("and", "or") else "and"
+    # Default browse favors recipes the user can most readily cook (issue #53);
+    # an unknown value falls back to that default rather than 422-ing.
+    sort_val = sort if sort in tools.SORT_VALUES else "availability"
 
     available_sources = tools.list_recipe_sources(db_path=db_path)
     selected_sources = [s for s in sources if s in available_sources]
@@ -126,6 +130,7 @@ def list_recipes(
             ingredient_mode=mode,
             pantry_only=pantry_only_val,
             offset=(page - 1) * limit_val,
+            sort=sort_val,
             db_path=db_path,
         )
     except sqlite3.OperationalError:
@@ -171,6 +176,12 @@ def list_recipes(
             "ingredients": ",".join(ingredient_list),
             "ingredient_mode": mode,
             "pantry_only": pantry_only_val,
+            "sort": sort_val,
+            "sort_choices": (
+                ("availability", "On-hand ingredients"),
+                ("rating", "Top rated"),
+                ("relevance", "Best match"),
+            ),
             "total": total,
             "page": page_val,
             "total_pages": total_pages,
