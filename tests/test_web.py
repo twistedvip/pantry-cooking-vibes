@@ -185,6 +185,83 @@ def test_recipes_limit_invalid_falls_back_to_default(client: TestClient):
     assert '<option value="50" selected>50</option>' in r.text
 
 
+# ---------- recipes pagination ----------
+
+
+@pytest.fixture
+def bulk_recipes(seeded_db_path) -> None:
+    """Pad the seeded DB to 62 recipes so the default 50-per-page paginates."""
+    with connect(seeded_db_path) as conn:
+        for i in range(60):
+            conn.execute(
+                "INSERT INTO recipes (source, source_id, name, rating) "
+                "VALUES ('manual', ?, ?, 2.0)",
+                (f"bulk-{i}", f"Bulk Recipe {i:02d}"),
+            )
+
+
+def test_recipes_paginates_past_first_page(client: TestClient, bulk_recipes):
+    r1 = client.get("/recipes")
+    assert r1.status_code == 200
+    assert "Showing 1–50 of 62 recipes" in r1.text
+    assert 'aria-current="page">1<' in r1.text
+    assert "page=2" in r1.text
+
+    r2 = client.get("/recipes", params={"page": 2})
+    assert r2.status_code == 200
+    assert "Showing 51–62 of 62 recipes" in r2.text
+    assert 'aria-current="page">2<' in r2.text
+    # Page 2 holds different cards than page 1.
+    assert r2.text.count("recipe-card") < r1.text.count("recipe-card")
+
+
+def test_recipes_page_links_preserve_filters(client: TestClient, bulk_recipes):
+    r = client.get("/recipes", params={"sources": "manual"})
+    assert r.status_code == 200
+    # The next-page link carries the active source filter along.
+    assert "sources=manual" in r.text and "page=2" in r.text
+
+
+def test_recipes_page_past_end_clamps_to_last(client: TestClient, bulk_recipes):
+    r = client.get("/recipes", params={"page": "999"})
+    assert r.status_code == 200
+    assert "Showing 51–62 of 62 recipes" in r.text
+
+
+def test_recipes_page_invalid_values_rejected(client: TestClient):
+    assert client.get("/recipes", params={"page": "abc"}).status_code == 422
+    assert client.get("/recipes", params={"page": "0"}).status_code == 422
+
+
+def test_recipes_no_pager_on_single_page(client: TestClient):
+    """Two seeded recipes fit one page; the pager should not render at all."""
+    r = client.get("/recipes")
+    assert r.status_code == 200
+    assert 'class="pager' not in r.text
+    assert "2 results." in r.text
+
+
+def test_limit_choices_stay_within_tools_cap():
+    """The route's page math assumes tools honors every limit choice verbatim;
+    a choice above MAX_RESULT_LIMIT would make deep pages unreachable."""
+    from pantry_cooking_vibes.mcp_server import tools
+    from pantry_cooking_vibes.web.routes import recipes as recipes_route
+
+    assert max(recipes_route._LIMIT_CHOICES) <= tools.MAX_RESULT_LIMIT
+
+
+def test_page_window_never_hides_a_single_page():
+    from pantry_cooking_vibes.web.routes.recipes import _page_window
+
+    # A gap of exactly one page renders the page, not an ellipsis.
+    assert _page_window(5, 25) == [1, 2, 3, 4, 5, 6, 7, None, 25]
+    assert _page_window(21, 25) == [1, None, 19, 20, 21, 22, 23, 24, 25]
+    # Wider gaps still collapse.
+    assert _page_window(6, 25) == [1, None, 4, 5, 6, 7, 8, None, 25]
+    # Short runs render in full.
+    assert _page_window(1, 7) == [1, 2, 3, 4, 5, 6, 7]
+
+
 def test_recipes_filter_by_ingredient(client: TestClient):
     r = client.get("/recipes", params={"ingredients": "broccoli"})
     assert r.status_code == 200

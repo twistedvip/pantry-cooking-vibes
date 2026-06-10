@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import sqlite3
 from pathlib import Path
 
@@ -44,6 +45,36 @@ def _parse_optional_int(raw: str, field: str, *, min_value: int = 0) -> int | No
 
 
 _LIMIT_CHOICES = (50, 100, 250)
+# The page/offset math trusts tools to honor these limits verbatim; a choice
+# above the tools-side cap would silently make deep pages unreachable.
+if max(_LIMIT_CHOICES) > tools.MAX_RESULT_LIMIT:
+    raise RuntimeError(
+        f"_LIMIT_CHOICES {_LIMIT_CHOICES} exceeds tools.MAX_RESULT_LIMIT "
+        f"({tools.MAX_RESULT_LIMIT}); deep pages would be unreachable"
+    )
+
+
+def _page_window(current: int, total_pages: int) -> list[int | None]:
+    """Page numbers worth rendering: 1 and last always, current ±2 between.
+
+    ``None`` marks a gap the template renders as an ellipsis, e.g.
+    ``[1, None, 4, 5, 6, 7, 8, None, 25]`` for page 6 of 25. An ellipsis is
+    never noise here: short runs (≤7 pages) render in full, and a gap that
+    would hide exactly one page emits that page instead.
+    """
+    if total_pages <= 7:
+        return list(range(1, total_pages + 1))
+    pages: list[int | None] = []
+    previous = 0
+    for p in range(1, total_pages + 1):
+        if p == 1 or p == total_pages or abs(p - current) <= 2:
+            if previous and p - previous == 2:
+                pages.append(p - 1)
+            elif previous and p - previous > 1:
+                pages.append(None)
+            pages.append(p)
+            previous = p
+    return pages
 
 
 @router.get("")
@@ -62,6 +93,9 @@ def list_recipes(
     pantry_only: str = Query(
         "", description="Set to 1 to show only recipes whose mapped ingredients are all in pantry"
     ),
+    # Unlike the filter fields, `page` never arrives as a blank form value —
+    # only pager links set it — so native int parsing (422 on garbage) is fine.
+    page: int = Query(1, ge=1, description="1-based result page"),
     db_path: Path = Depends(get_db_path),
 ) -> object:
     max_time_val = _parse_optional_int(max_time, "max_time", min_value=0)
@@ -76,11 +110,12 @@ def list_recipes(
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     ingredient_list = [i.strip() for i in ingredients.split(",") if i.strip()]
-    # search_recipes sanitizes the FTS5 query, but DB-level errors at the
+    # search_recipes_page sanitizes the FTS5 query, but DB-level errors at the
     # boundary (corrupt index, locked file, bad migration) shouldn't 500 the
     # whole page — log them, render an empty result so the UI stays usable.
+    page_data: tools.RecipePage
     try:
-        results = tools.search_recipes(
+        page_data = tools.search_recipes_page(
             query=q,
             max_time_min=max_time_val,
             tags=tag_list or None,
@@ -90,6 +125,7 @@ def list_recipes(
             ingredients=ingredient_list or None,
             ingredient_mode=mode,
             pantry_only=pantry_only_val,
+            offset=(page - 1) * limit_val,
             db_path=db_path,
         )
     except sqlite3.OperationalError:
@@ -98,8 +134,16 @@ def list_recipes(
         # CodeQL recognizes as a log-injection sanitizer.
         safe_q = q.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
         safe_tags = [t.replace("\r\n", " ").replace("\n", " ").replace("\r", " ") for t in tag_list]
-        log.exception("search_recipes failed: q=%r tags=%r", safe_q, safe_tags)
-        results = []
+        log.exception("search_recipes_page failed: q=%r tags=%r", safe_q, safe_tags)
+        page_data = {"items": [], "total": 0, "offset": 0}
+
+    results = page_data["items"]
+    total = page_data["total"]
+    # Derived once for both the happy and the error path. The effective page
+    # comes from the offset tools actually used (it clamps past-the-end
+    # offsets to the final page, and clamped offsets are limit-aligned).
+    page_val = page_data["offset"] // limit_val + 1
+    total_pages = max(1, math.ceil(total / limit_val))
 
     # Attach pantry coverage so each card can show "what can I cook now". Only
     # meaningful when the pantry has something in it; skip the work (and the
@@ -127,6 +171,10 @@ def list_recipes(
             "ingredients": ",".join(ingredient_list),
             "ingredient_mode": mode,
             "pantry_only": pantry_only_val,
+            "total": total,
+            "page": page_val,
+            "total_pages": total_pages,
+            "page_window": _page_window(page_val, total_pages),
         },
     )
 

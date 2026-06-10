@@ -11,7 +11,7 @@ import re
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from pantry_cooking_vibes.dates import current_sunday
 from pantry_cooking_vibes.db import DB_PATH, connect
@@ -91,57 +91,39 @@ def _canonical_id_exists_clause(ids: list[int]) -> str:
     )
 
 
-def search_recipes(
-    query: str = "",
-    max_time_min: int | None = None,
-    tags: list[str] | None = None,
-    limit: int = DEFAULT_RESULT_LIMIT,
-    favorites_only: bool = False,
-    sources: list[str] | None = None,
-    ingredients: list[str] | None = None,
-    ingredient_mode: str = "and",
-    pantry_only: bool = False,
-    *,
-    db_path: Path | None = None,
-) -> list[dict]:
-    """Search recipes via FTS5 + cooking-time + tag + source filters.
+def _recipe_query_parts(
+    conn: sqlite3.Connection,
+    query: str,
+    max_time_min: int | None,
+    tags: list[str] | None,
+    favorites_only: bool,
+    sources: list[str] | None,
+    ingredients: list[str] | None,
+    ingredient_mode: str,
+    pantry_only: bool,
+) -> tuple[str, str, list[Any]] | None:
+    """Shared FROM/WHERE (+ ORDER BY) builder for search/count over recipes.
 
-    Empty query browses all recipes ordered by rating. Empty/None ``sources``
-    means no source restriction.
-
-    ``ingredients`` filters to recipes containing the named canonical ingredients.
-    ``ingredient_mode='and'`` requires all of them; ``'or'`` requires any.
-    ``pantry_only=True`` further restricts to recipes whose mapped ingredients
-    are all present in the pantry (unmapped ingredients are ignored).
+    Returns ``(from_where_sql, order_sql, params)``. Returns ``None`` when an
+    ingredient term resolves to no canonical ids — the filter is unsatisfiable
+    and callers short-circuit to zero results.
     """
-    db = db_path or DB_PATH
-    limit = _clamp_limit(limit)
-    if ingredient_mode not in ("and", "or"):
-        raise ValueError("ingredient_mode must be 'and' or 'or'")
     params: list[Any] = []
     where: list[str] = []
 
-    select_cols = (
-        "SELECT r.id, r.source, r.name, r.cooking_time_min, r.servings, "
-        "r.rating, r.rating_count, r.image_url, "
-        "(rf.recipe_id IS NOT NULL) AS is_favorite "
-    )
     if query.strip():
-        sql_base = (
-            f"{select_cols}"
+        from_where = (
             "FROM recipes_fts f JOIN recipes r ON r.id = f.rowid "
             "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id "
             "WHERE recipes_fts MATCH ?"
         )
         params.append(_fts5_escape_query(query))
-        order = "ORDER BY f.rank, r.rating DESC NULLS LAST"
+        # r.id tiebreaker: bm25 rank and rating tie across many bulk-ingested
+        # rows, and SQLite's order among ties is unstable between queries —
+        # without a unique key, LIMIT/OFFSET pages can skip or repeat recipes.
+        order = "ORDER BY f.rank, r.rating DESC NULLS LAST, r.id"
     else:
-        sql_base = (
-            f"{select_cols}"
-            "FROM recipes r "
-            "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id "
-            "WHERE 1=1"
-        )
+        from_where = "FROM recipes r LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id WHERE 1=1"
         order = "ORDER BY is_favorite DESC, r.rating DESC NULLS LAST, r.id"
 
     if max_time_min is not None:
@@ -163,47 +145,185 @@ def search_recipes(
             where.append(f"r.source IN ({placeholders})")
             params.extend(cleaned)
 
-    with connect(db) as conn:
-        if ingredients:
-            groups = _resolve_ingredient_canonical_ids(conn, ingredients)
-            if ingredient_mode == "and":
-                # Each term must be satisfied; a term may match any of its ids.
-                for ids in groups:
-                    if not ids:
-                        return []  # term resolved to nothing → unsatisfiable
-                    where.append(_canonical_id_exists_clause(ids))
-                    params.extend(ids)
-            else:  # or — any id from any term satisfies
-                all_ids = [cid for ids in groups for cid in ids]
-                if not all_ids:
-                    return []  # nothing resolved → no recipe can satisfy
-                where.append(_canonical_id_exists_clause(all_ids))
-                params.extend(all_ids)
+    if ingredients:
+        groups = _resolve_ingredient_canonical_ids(conn, ingredients)
+        if ingredient_mode == "and":
+            # Each term must be satisfied; a term may match any of its ids.
+            for ids in groups:
+                if not ids:
+                    return None  # term resolved to nothing → unsatisfiable
+                where.append(_canonical_id_exists_clause(ids))
+                params.extend(ids)
+        else:  # or — any id from any term satisfies
+            all_ids = [cid for ids in groups for cid in ids]
+            if not all_ids:
+                return None  # nothing resolved → no recipe can satisfy
+            where.append(_canonical_id_exists_clause(all_ids))
+            params.extend(all_ids)
 
-        if pantry_only:
-            where.append(
-                "NOT EXISTS (SELECT 1 FROM recipe_ingredients ri "
-                "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL "
-                "AND ri.canonical_id NOT IN (SELECT canonical_id FROM pantry))"
-            )
-            # require at least one mapped ingredient so empty/all-unmapped recipes
-            # don't qualify trivially
-            where.append(
-                "EXISTS (SELECT 1 FROM recipe_ingredients ri "
-                "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL)"
-            )
+    if pantry_only:
+        where.append(
+            "NOT EXISTS (SELECT 1 FROM recipe_ingredients ri "
+            "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL "
+            "AND ri.canonical_id NOT IN (SELECT canonical_id FROM pantry))"
+        )
+        # require at least one mapped ingredient so empty/all-unmapped recipes
+        # don't qualify trivially
+        where.append(
+            "EXISTS (SELECT 1 FROM recipe_ingredients ri "
+            "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL)"
+        )
 
-        sql = sql_base
-        if where:
-            sql += " AND " + " AND ".join(where)
-        sql += f" {order} LIMIT ?"
-        params.append(limit)
+    if where:
+        from_where += " AND " + " AND ".join(where)
+    return from_where, order, params
 
-        rows = conn.execute(sql, params).fetchall()
+
+_RECIPE_SELECT_COLS = (
+    "SELECT r.id, r.source, r.name, r.cooking_time_min, r.servings, "
+    "r.rating, r.rating_count, r.image_url, "
+    "(rf.recipe_id IS NOT NULL) AS is_favorite "
+)
+
+
+class RecipePage(TypedDict):
+    """One browse page: the rows, the filter-wide total, the effective offset."""
+
+    items: list[dict]
+    total: int
+    offset: int
+
+
+def _rows_to_recipe_dicts(rows: list[sqlite3.Row]) -> list[dict]:
     results = [_row_to_dict(r) for r in rows]
     for r in results:
         r["is_favorite"] = bool(r.get("is_favorite"))
     return results
+
+
+def search_recipes(
+    query: str = "",
+    max_time_min: int | None = None,
+    tags: list[str] | None = None,
+    limit: int = DEFAULT_RESULT_LIMIT,
+    favorites_only: bool = False,
+    sources: list[str] | None = None,
+    ingredients: list[str] | None = None,
+    ingredient_mode: str = "and",
+    pantry_only: bool = False,
+    offset: int = 0,
+    *,
+    db_path: Path | None = None,
+) -> list[dict]:
+    """Search recipes via FTS5 + cooking-time + tag + source filters.
+
+    Empty query browses all recipes ordered by rating. Empty/None ``sources``
+    means no source restriction.
+
+    ``ingredients`` filters to recipes containing the named canonical ingredients.
+    ``ingredient_mode='and'`` requires all of them; ``'or'`` requires any.
+    ``pantry_only=True`` further restricts to recipes whose mapped ingredients
+    are all present in the pantry (unmapped ingredients are ignored).
+
+    ``offset`` skips that many rows; past the end the result is ``[]``, so
+    ``offset += limit`` iteration terminates. UIs that need a total and
+    stale-page clamping want :func:`search_recipes_page` instead.
+    """
+    db = db_path or DB_PATH
+    limit = _clamp_limit(limit)
+    offset = max(0, int(offset))
+    if ingredient_mode not in ("and", "or"):
+        raise ValueError("ingredient_mode must be 'and' or 'or'")
+
+    with connect(db) as conn:
+        parts = _recipe_query_parts(
+            conn,
+            query,
+            max_time_min,
+            tags,
+            favorites_only,
+            sources,
+            ingredients,
+            ingredient_mode,
+            pantry_only,
+        )
+        if parts is None:
+            return []
+        from_where, order, params = parts
+        sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
+        rows = conn.execute(sql, [*params, limit, offset]).fetchall()
+    return _rows_to_recipe_dicts(rows)
+
+
+def search_recipes_page(
+    query: str = "",
+    max_time_min: int | None = None,
+    tags: list[str] | None = None,
+    limit: int = DEFAULT_RESULT_LIMIT,
+    favorites_only: bool = False,
+    sources: list[str] | None = None,
+    ingredients: list[str] | None = None,
+    ingredient_mode: str = "and",
+    pantry_only: bool = False,
+    offset: int = 0,
+    *,
+    db_path: Path | None = None,
+) -> RecipePage:
+    """One browse-page query: ``{"items": [...], "total": int, "offset": int}``.
+
+    Same filters as :func:`search_recipes`, but the COUNT and the SELECT run
+    inside one read transaction on one connection, built from the same query
+    parts — the total can never describe a different result set than the rows.
+    An ``offset`` past the end clamps to the final page (a stale bookmark
+    lands on real results); the returned ``offset`` is the effective one after
+    clamping, always a multiple of ``limit``.
+    """
+    db = db_path or DB_PATH
+    limit = _clamp_limit(limit)
+    offset = max(0, int(offset))
+    if ingredient_mode not in ("and", "or"):
+        raise ValueError("ingredient_mode must be 'and' or 'or'")
+
+    with connect(db) as conn:
+        # Explicit read transaction: WAL pins one snapshot for both statements,
+        # so a concurrent ingest/delete can't desync the total from the rows.
+        # connect() commits on exit, which ends the transaction.
+        conn.execute("BEGIN")
+        parts = _recipe_query_parts(
+            conn,
+            query,
+            max_time_min,
+            tags,
+            favorites_only,
+            sources,
+            ingredients,
+            ingredient_mode,
+            pantry_only,
+        )
+        if parts is None:
+            return {"items": [], "total": 0, "offset": 0}
+        from_where, order, params = parts
+
+        def _count() -> int:
+            row = conn.execute(f"SELECT COUNT(*) AS n {from_where}", params).fetchone()
+            return int(row["n"])
+
+        def _select(off: int) -> list[sqlite3.Row]:
+            sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
+            return conn.execute(sql, [*params, limit, off]).fetchall()
+
+        if offset == 0:
+            # Common case: the first page. When it isn't full, its length IS
+            # the total — skip the COUNT, which re-runs the whole WHERE.
+            rows = _select(0)
+            total = len(rows) if len(rows) < limit else _count()
+        else:
+            total = _count()
+            if offset >= total:
+                offset = ((total - 1) // limit) * limit if total else 0
+            rows = _select(offset)
+
+    return {"items": _rows_to_recipe_dicts(rows), "total": total, "offset": offset}
 
 
 def list_recipe_sources(*, db_path: Path | None = None) -> list[str]:

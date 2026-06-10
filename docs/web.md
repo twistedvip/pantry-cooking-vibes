@@ -23,10 +23,19 @@ surface.
 | GET    | `/plans/{id}/shopping`         | `plans.py::plan_shopping`            | no            |
 
 Filter state on `/recipes` is carried in query strings (`q`, `max_time`,
-`tags`, `limit`, `fav`). Blank numeric fields from the HTML form are
+`tags`, `limit`, `fav`, `page`). Blank numeric fields from the HTML form are
 coerced in `_parse_optional_int` — FastAPI's `Optional[int]` rejects `""`
 with a 422, so the route accepts `str` and parses it. Non-numeric values
 still raise 422.
+
+Results paginate server-side: `limit` is the page size, `page` (1-based) the
+slice, backed by a single `tools.search_recipes_page()` call that runs the
+COUNT and the SELECT in one read transaction from the same query parts (the
+total always describes the rendered rows) and clamps a past-the-end offset to
+the final page — the route derives the effective page from the returned
+offset. Pager links rebuild the full current query with only `page` swapped
+(Starlette `include_query_params`), so the filter form — which never submits
+`page` — naturally resets to page 1.
 
 ## App factory
 
