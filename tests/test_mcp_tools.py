@@ -216,9 +216,23 @@ def test_search_recipes_sort_availability_empty_set_falls_back_to_rating(db_path
         (a,) = _canon_ids(conn, 1)
         _add_recipe(conn, "Low", rating=2.0, canonical_ids=[a], source_id="low")
         _add_recipe(conn, "High", rating=4.0, canonical_ids=[a], source_id="high")
-    # Empty pantry + no plans → no have-set; must not crash, degrades to rating order.
-    names = [r["name"] for r in tools.search_recipes(sort="availability", db_path=db_path)]
-    assert names == ["High", "Low"]
+    # Empty pantry + no plans → all have_counts are 0; degrades to rating order.
+    rows = tools.search_recipes(sort="availability", db_path=db_path)
+    assert [r["name"] for r in rows] == ["High", "Low"]
+    # The result shape is stable: have_count is always present under this sort.
+    assert [r["have_count"] for r in rows] == [0, 0]
+
+
+def test_search_recipes_sort_rating_ignores_favorites(db_path):
+    with connect(db_path) as conn:
+        (a,) = _canon_ids(conn, 1)
+        fav = _add_recipe(conn, "Loved but Low", rating=2.0, canonical_ids=[a], source_id="fav")
+        _add_recipe(conn, "Unloved but High", rating=5.0, canonical_ids=[a], source_id="high")
+        conn.execute("INSERT INTO recipe_favorites (recipe_id) VALUES (?)", (fav,))
+    # "Top rated" promises pure rating order: a favorite must not pin above
+    # a higher-rated recipe (unlike the no-query browse default, which does).
+    names = [r["name"] for r in tools.search_recipes(sort="rating", db_path=db_path)]
+    assert names == ["Unloved but High", "Loved but Low"]
 
 
 def test_search_recipes_invalid_sort_falls_back(seeded_db_path):
@@ -408,6 +422,30 @@ def test_pantry_coverage_for_recipes(seeded_db_path):
 
 def test_pantry_coverage_for_recipes_empty_input(seeded_db_path):
     assert tools.pantry_coverage_for_recipes([], db_path=seeded_db_path) == {}
+
+
+def test_pantry_coverage_include_planned_counts_plan_ingredients(db_path):
+    """include_planned=True widens "have" to ingredients of upcoming-plan recipes."""
+    with connect(db_path) as conn:
+        x, y = _canon_ids(conn, 2)
+        planned = _add_recipe(conn, "Planned Dish", rating=1.0, canonical_ids=[x], source_id="pd")
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES (?) RETURNING id",
+            (current_sunday().isoformat(),),
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, planned)
+        )
+        target = _add_recipe(conn, "Target", rating=2.0, canonical_ids=[x, y], source_id="tg")
+
+    # Pantry is empty: pantry-only coverage sees nothing, planned coverage sees x.
+    assert tools.pantry_coverage_for_recipes([target], db_path=db_path)[target] == {
+        "have": 0,
+        "mapped": 2,
+    }
+    assert tools.pantry_coverage_for_recipes([target], include_planned=True, db_path=db_path)[
+        target
+    ] == {"have": 1, "mapped": 2}
 
 
 # ---------- get_recipe ----------

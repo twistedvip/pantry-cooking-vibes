@@ -36,8 +36,12 @@ items plus ingredients required by any current/future-week meal plan
 query, FTS relevance stays primary and the on-hand count breaks ties. `rating`
 is always top-rated first; `relevance` is the legacy default (FTS rank when a
 query is present, else rating). The ordering is built in
-`tools._order_clause` / `tools._recipe_query_parts`; the on-hand set comes from
-`tools._availability_canonical_ids`.
+`tools._order_clause` / `tools._recipe_query_parts`; the on-hand set is the
+inline `tools._availability_have_set()` fragment (pantry ∪ upcoming-plan
+ingredients), evaluated in-query so no id round-trip is needed. The per-card
+coverage badge counts the same set (`pantry_coverage_for_recipes(...,
+include_planned=True)`), so the badge and the ranking share one definition
+of "have".
 
 Results paginate server-side: `limit` is the page size, `page` (1-based) the
 slice, backed by a single `tools.search_recipes_page()` call that runs the

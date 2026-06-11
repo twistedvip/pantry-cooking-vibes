@@ -17,7 +17,7 @@
     {% if selected_sources %}{% set ns.active = ns.active + 1 %}{% endif %}
     {% if favorites_only %}{% set ns.active = ns.active + 1 %}{% endif %}
     {% if pantry_only %}{% set ns.active = ns.active + 1 %}{% endif %}
-    {% if sort and sort != 'availability' %}{% set ns.active = ns.active + 1 %}{% endif %}
+    {% if sort and sort != default_sort %}{% set ns.active = ns.active + 1 %}{% endif %}
     {# Checkbox-driven disclosure: invisible but focusable, toggled by the label
        below. Drives the mobile collapse via CSS only (see .filter-rail-body).
        Pre-checked when filters are active so applied state stays visible. #}
@@ -108,11 +108,7 @@
         {{ total }} result{{ '' if total == 1 else 's' }}.
         {%- endif -%}
       </p>
-      <span class="label">sorted by
-        {%- if sort == 'rating' %} top-rated first
-        {%- elif sort == 'relevance' %} {% if q %}best match{% else %}top-rated first{% endif %}
-        {%- else %} most ingredients on hand{% if q %} (best match first){% endif %}
-        {%- endif %}</span>
+      <span class="label">sorted by {{ sort_label }}</span>
     </div>
     <ul class="recipe-grid">
       {% for r in recipes %}
@@ -137,9 +133,9 @@
             <div class="meta">
               {% if r.coverage and r.coverage.mapped %}
                 {% if r.coverage.have == r.coverage.mapped %}
-                <span class="coverage full" title="You have all {{ r.coverage.mapped }} of this recipe's matched ingredients">✓ have all</span>
+                <span class="coverage full" title="You have (or have planned) all {{ r.coverage.mapped }} of this recipe's matched ingredients">✓ have all</span>
                 {% elif r.coverage.have > 0 %}
-                <span class="coverage partial" title="You have {{ r.coverage.have }} of {{ r.coverage.mapped }} matched ingredients">have {{ r.coverage.have }} of {{ r.coverage.mapped }}</span>
+                <span class="coverage partial" title="You have (or have planned) {{ r.coverage.have }} of {{ r.coverage.mapped }} matched ingredients">have {{ r.coverage.have }} of {{ r.coverage.mapped }}</span>
                 {% endif %}
               {% endif %}
               {% if r.cooking_time_min is not none %}<span>⏱ {{ r.cooking_time_min }} min</span>{% endif %}
