@@ -21,8 +21,14 @@ def test_recipe_search_works_with_js_disabled(live_server, browser):
     try:
         page = context.new_page()
         page.goto(f"{live_server}/recipes")
+        # Submit via Enter in the search field rather than clicking the Filter
+        # button. The button lives in a position:sticky rail whose .btn-row parent
+        # can intercept the click mid-scroll ("element is not stable"), which made
+        # the old button[type=submit] click flaky on slow CI runners. A native
+        # Enter-to-submit needs no scroll-into-view and is the more common no-JS
+        # search gesture anyway.
         page.fill('input[name="q"]', "chicken")
-        page.click('button[type="submit"]')
+        page.press('input[name="q"]', "Enter")
         page.wait_for_load_state("load")
 
         body = page.content().lower()
