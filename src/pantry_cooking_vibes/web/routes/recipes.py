@@ -77,6 +77,39 @@ def _page_window(current: int, total_pages: int) -> list[int | None]:
     return pages
 
 
+# The browse default favors recipes the user can most readily cook (issue #53).
+# Single source for the web-layer default: the query-param default, the
+# normalize_sort fallback, and the template's active-filter check all read it.
+WEB_DEFAULT_SORT = "availability"
+
+# Dropdown labels per sort value. The guard below means a sort mode added to
+# tools.SORT_VALUES cannot ship without a dropdown entry (and forces a look at
+# _sort_label's toolbar copy in the same breath).
+_SORT_CHOICES = {
+    "availability": "On-hand ingredients",
+    "rating": "Top rated",
+    "relevance": "Best match",
+}
+if set(_SORT_CHOICES) != set(tools.SORT_VALUES):
+    raise RuntimeError(
+        f"_SORT_CHOICES keys {tuple(_SORT_CHOICES)} out of sync with "
+        f"tools.SORT_VALUES {tools.SORT_VALUES}"
+    )
+
+
+def _sort_label(sort: str, has_query: bool) -> str:
+    """Human description of the ordering actually applied (toolbar copy).
+
+    Lives next to the route (not the template) so the wording stays in one
+    place with the ``_SORT_CHOICES`` labels and tracks ``tools._order_clause``.
+    """
+    if sort == "rating":
+        return "top-rated first"
+    if sort == "relevance":
+        return "best match" if has_query else "top-rated first"
+    return "most ingredients on hand" + (" (best match first)" if has_query else "")
+
+
 @router.get("")
 def list_recipes(
     request: Request,
@@ -93,6 +126,9 @@ def list_recipes(
     pantry_only: str = Query(
         "", description="Set to 1 to show only recipes whose mapped ingredients are all in pantry"
     ),
+    sort: str = Query(
+        WEB_DEFAULT_SORT, description="Sort order: availability | rating | relevance"
+    ),
     # Unlike the filter fields, `page` never arrives as a blank form value —
     # only pager links set it — so native int parsing (422 on garbage) is fine.
     page: int = Query(1, ge=1, description="1-based result page"),
@@ -104,6 +140,8 @@ def list_recipes(
     favorites_only = fav == "1"
     pantry_only_val = pantry_only == "1"
     mode = ingredient_mode if ingredient_mode in ("and", "or") else "and"
+    # An unknown sort falls back to the web default rather than 422-ing.
+    sort_val = tools.normalize_sort(sort, default=WEB_DEFAULT_SORT)
 
     available_sources = tools.list_recipe_sources(db_path=db_path)
     selected_sources = [s for s in sources if s in available_sources]
@@ -126,6 +164,7 @@ def list_recipes(
             ingredient_mode=mode,
             pantry_only=pantry_only_val,
             offset=(page - 1) * limit_val,
+            sort=sort_val,
             db_path=db_path,
         )
     except sqlite3.OperationalError:
@@ -145,11 +184,15 @@ def list_recipes(
     page_val = page_data["offset"] // limit_val + 1
     total_pages = max(1, math.ceil(total / limit_val))
 
-    # Attach pantry coverage so each card can show "what can I cook now". Only
-    # meaningful when the pantry has something in it; skip the work (and the
-    # noise of all-zero badges) for an empty pantry.
-    if results and tools.list_pantry(db_path=db_path):
-        coverage = tools.pantry_coverage_for_recipes([r["id"] for r in results], db_path=db_path)
+    # Attach coverage so each card can show "what can I cook now".
+    # include_planned=True makes the badge count the same have-set definition
+    # the availability sort ranks by (pantry ∪ upcoming-plan ingredients), so
+    # ranking and badge agree up to the two queries running back-to-back.
+    # All-zero coverage renders no badge in the template, so no gate is needed.
+    if results:
+        coverage = tools.pantry_coverage_for_recipes(
+            [r["id"] for r in results], include_planned=True, db_path=db_path
+        )
         for r in results:
             cov = coverage.get(r["id"])
             if cov and cov["mapped"]:
@@ -171,6 +214,12 @@ def list_recipes(
             "ingredients": ",".join(ingredient_list),
             "ingredient_mode": mode,
             "pantry_only": pantry_only_val,
+            "sort": sort_val,
+            "default_sort": WEB_DEFAULT_SORT,
+            "sort_choices": tuple(_SORT_CHOICES.items()),
+            # strip() to match tools' has_query: a whitespace-only q takes the
+            # no-query SQL path, so the label must not claim "best match first".
+            "sort_label": _sort_label(sort_val, bool(q.strip())),
             "total": total,
             "page": page_val,
             "total_pages": total_pages,

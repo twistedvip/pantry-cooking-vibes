@@ -121,6 +121,29 @@ def test_recipes_filter_max_time(client: TestClient):
     assert "Broccoli Soup" not in r.text  # 60 min
 
 
+def test_recipes_default_sort_is_availability(client: TestClient):
+    r = client.get("/recipes")
+    assert r.status_code == 200
+    # The sort selector renders with "On-hand ingredients" pre-selected...
+    assert 'name="sort"' in r.text
+    assert 'value="availability" selected' in r.text
+    # ...and the toolbar reports the on-hand ordering.
+    assert "most ingredients on hand" in r.text
+
+
+def test_recipes_sort_rating_switches_label(client: TestClient):
+    r = client.get("/recipes", params={"sort": "rating"})
+    assert r.status_code == 200
+    assert 'value="rating" selected' in r.text
+    assert "top-rated first" in r.text
+
+
+def test_recipes_invalid_sort_falls_back_to_availability(client: TestClient):
+    r = client.get("/recipes", params={"sort": "bogus"})
+    assert r.status_code == 200
+    assert 'value="availability" selected' in r.text
+
+
 def test_recipes_filter_tags(client: TestClient):
     r = client.get("/recipes", params={"tags": "soup"})
     assert r.status_code == 200

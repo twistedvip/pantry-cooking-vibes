@@ -23,10 +23,25 @@ surface.
 | GET    | `/plans/{id}/shopping`         | `plans.py::plan_shopping`            | no            |
 
 Filter state on `/recipes` is carried in query strings (`q`, `max_time`,
-`tags`, `limit`, `fav`, `page`). Blank numeric fields from the HTML form are
-coerced in `_parse_optional_int` — FastAPI's `Optional[int]` rejects `""`
-with a 422, so the route accepts `str` and parses it. Non-numeric values
+`tags`, `limit`, `fav`, `sort`, `page`). Blank numeric fields from the HTML
+form are coerced in `_parse_optional_int` — FastAPI's `Optional[int]` rejects
+`""` with a 422, so the route accepts `str` and parses it. Non-numeric values
 still raise 422.
+
+`sort` is one of `availability` (default), `rating`, or `relevance`; an unknown
+value falls back to `availability` rather than 422-ing. `availability` ranks
+recipes by how many of their mapped ingredients the user already has — pantry
+items plus ingredients required by any current/future-week meal plan
+(`meal_plans.week_of >= this week's Sunday`, draft or confirmed). With a text
+query, FTS relevance stays primary and the on-hand count breaks ties. `rating`
+is always top-rated first; `relevance` is the legacy default (FTS rank when a
+query is present, else rating). The ordering is built in
+`tools._order_clause` / `tools._recipe_query_parts`; the on-hand set is the
+inline `tools._availability_have_set()` fragment (pantry ∪ upcoming-plan
+ingredients), evaluated in-query so no id round-trip is needed. The per-card
+coverage badge counts the same set (`pantry_coverage_for_recipes(...,
+include_planned=True)`), so the badge and the ranking share one definition
+of "have".
 
 Results paginate server-side: `limit` is the page size, `page` (1-based) the
 slice, backed by a single `tools.search_recipes_page()` call that runs the

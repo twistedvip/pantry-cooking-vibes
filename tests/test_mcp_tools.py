@@ -3,11 +3,40 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 
 import pytest
 
+from pantry_cooking_vibes.dates import current_sunday
 from pantry_cooking_vibes.db import connect
 from pantry_cooking_vibes.mcp_server import tools
+
+
+def _canon_ids(conn, n):
+    """First ``n`` canonical-ingredient ids from the seed (stable, name-agnostic)."""
+    return [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM canonical_ingredients ORDER BY id LIMIT ?", (n,)
+        ).fetchall()
+    ]
+
+
+def _add_recipe(conn, name, *, rating, canonical_ids, source_id):
+    """Insert a manual recipe with the given mapped ingredients; return its id."""
+    rid = conn.execute(
+        "INSERT INTO recipes (source, source_id, name, rating) "
+        "VALUES ('manual', ?, ?, ?) RETURNING id",
+        (source_id, name, rating),
+    ).fetchone()["id"]
+    for cid in canonical_ids:
+        conn.execute(
+            "INSERT INTO recipe_ingredients (recipe_id, canonical_id, original_text) "
+            "VALUES (?, ?, 'x')",
+            (rid, cid),
+        )
+    return rid
+
 
 # ---------- search_recipes ----------
 
@@ -118,6 +147,114 @@ def test_search_recipes_offset_past_end_returns_empty(seeded_db_path):
 def test_search_recipes_negative_offset_treated_as_zero(seeded_db_path):
     everything = tools.search_recipes(db_path=seeded_db_path)
     assert tools.search_recipes(offset=-5, db_path=seeded_db_path) == everything
+
+
+# ---------- sort=availability (issue #53) ----------
+
+
+def test_search_recipes_sort_availability_orders_by_onhand_count(db_path):
+    with connect(db_path) as conn:
+        a, b, c = _canon_ids(conn, 3)
+        # 2 pantry-matched ingredients but a LOWER rating...
+        _add_recipe(conn, "Pantry Rich", rating=3.0, canonical_ids=[a, b], source_id="rich")
+        # ...vs a HIGHER-rated recipe with only 1 pantry-matched ingredient.
+        _add_recipe(conn, "Pantry Lean", rating=5.0, canonical_ids=[a, c], source_id="lean")
+        conn.execute("INSERT INTO pantry (canonical_id, quantity) VALUES (?, 1)", (a,))
+        conn.execute("INSERT INTO pantry (canonical_id, quantity) VALUES (?, 1)", (b,))
+
+    by_avail = [r["name"] for r in tools.search_recipes(sort="availability", db_path=db_path)]
+    assert by_avail.index("Pantry Rich") < by_avail.index("Pantry Lean")
+    # rating sort flips it: the higher-rated, lean recipe leads.
+    by_rating = [r["name"] for r in tools.search_recipes(sort="rating", db_path=db_path)]
+    assert by_rating.index("Pantry Lean") < by_rating.index("Pantry Rich")
+
+
+def test_search_recipes_availability_counts_current_plan_ingredients(db_path):
+    with connect(db_path) as conn:
+        x, y, z = _canon_ids(conn, 3)
+        # A recipe in this week's plan "commits" ingredient x.
+        planned = _add_recipe(conn, "Planned Dish", rating=1.0, canonical_ids=[x], source_id="plan")
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES (?) RETURNING id",
+            (current_sunday().isoformat(),),
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, planned)
+        )
+        # Shares x via the plan (have_count 1); the higher-rated rival shares nothing.
+        _add_recipe(
+            conn, "Shares Plan Ingredient", rating=2.0, canonical_ids=[x, y], source_id="sh"
+        )
+        _add_recipe(conn, "Unrelated Rival", rating=5.0, canonical_ids=[z], source_id="riv")
+
+    # Pantry is empty, so only the plan lifts the sharer above the higher-rated rival.
+    names = [r["name"] for r in tools.search_recipes(sort="availability", db_path=db_path)]
+    assert names.index("Shares Plan Ingredient") < names.index("Unrelated Rival")
+
+
+def test_search_recipes_availability_ignores_past_plan_ingredients(db_path):
+    with connect(db_path) as conn:
+        x, y, z = _canon_ids(conn, 3)
+        planned = _add_recipe(conn, "Old Planned", rating=1.0, canonical_ids=[x], source_id="old")
+        past_week = (current_sunday() - timedelta(days=7)).isoformat()
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES (?) RETURNING id", (past_week,)
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, planned)
+        )
+        _add_recipe(conn, "Shares Old Ingredient", rating=2.0, canonical_ids=[x, y], source_id="so")
+        _add_recipe(conn, "Higher Rated Rival", rating=5.0, canonical_ids=[z], source_id="hr")
+
+    # Past plan contributes nothing → every have_count is 0 → falls back to rating order.
+    names = [r["name"] for r in tools.search_recipes(sort="availability", db_path=db_path)]
+    assert names.index("Higher Rated Rival") < names.index("Shares Old Ingredient")
+
+
+def test_search_recipes_sort_availability_empty_set_falls_back_to_rating(db_path):
+    with connect(db_path) as conn:
+        (a,) = _canon_ids(conn, 1)
+        _add_recipe(conn, "Low", rating=2.0, canonical_ids=[a], source_id="low")
+        _add_recipe(conn, "High", rating=4.0, canonical_ids=[a], source_id="high")
+    # Empty pantry + no plans → all have_counts are 0; degrades to rating order.
+    rows = tools.search_recipes(sort="availability", db_path=db_path)
+    assert [r["name"] for r in rows] == ["High", "Low"]
+    # The result shape is stable: have_count is always present under this sort.
+    assert [r["have_count"] for r in rows] == [0, 0]
+
+
+def test_search_recipes_sort_rating_ignores_favorites(db_path):
+    with connect(db_path) as conn:
+        (a,) = _canon_ids(conn, 1)
+        fav = _add_recipe(conn, "Loved but Low", rating=2.0, canonical_ids=[a], source_id="fav")
+        _add_recipe(conn, "Unloved but High", rating=5.0, canonical_ids=[a], source_id="high")
+        conn.execute("INSERT INTO recipe_favorites (recipe_id) VALUES (?)", (fav,))
+    # "Top rated" promises pure rating order: a favorite must not pin above
+    # a higher-rated recipe (unlike the no-query browse default, which does).
+    names = [r["name"] for r in tools.search_recipes(sort="rating", db_path=db_path)]
+    assert names == ["Unloved but High", "Loved but Low"]
+
+
+def test_search_recipes_invalid_sort_falls_back(seeded_db_path):
+    # An unknown sort value must not raise; it behaves like the default.
+    rows = tools.search_recipes(sort="bogus", db_path=seeded_db_path)
+    assert isinstance(rows, list) and rows
+
+
+def test_search_recipes_page_availability_with_query_breaks_ties(db_path):
+    with connect(db_path) as conn:
+        a, b = _canon_ids(conn, 2)
+        _add_recipe(conn, "Broccoli Bowl A", rating=3.0, canonical_ids=[a, b], source_id="ba")
+        _add_recipe(conn, "Broccoli Bowl B", rating=4.5, canonical_ids=[a], source_id="bb")
+        conn.execute("INSERT INTO pantry (canonical_id, quantity) VALUES (?, 1)", (a,))
+        conn.execute("INSERT INTO pantry (canonical_id, quantity) VALUES (?, 1)", (b,))
+
+    page = tools.search_recipes_page(query="Broccoli", sort="availability", db_path=db_path)
+    # COUNT must stay correct despite the availability LEFT JOIN.
+    assert page["total"] == 2
+    # Both match "Broccoli" equally; on-hand count breaks the FTS-rank tie.
+    names = [r["name"] for r in page["items"]]
+    assert names.index("Broccoli Bowl A") < names.index("Broccoli Bowl B")
 
 
 def test_search_recipes_page_total_ignores_limit(seeded_db_path):
@@ -285,6 +422,30 @@ def test_pantry_coverage_for_recipes(seeded_db_path):
 
 def test_pantry_coverage_for_recipes_empty_input(seeded_db_path):
     assert tools.pantry_coverage_for_recipes([], db_path=seeded_db_path) == {}
+
+
+def test_pantry_coverage_include_planned_counts_plan_ingredients(db_path):
+    """include_planned=True widens "have" to ingredients of upcoming-plan recipes."""
+    with connect(db_path) as conn:
+        x, y = _canon_ids(conn, 2)
+        planned = _add_recipe(conn, "Planned Dish", rating=1.0, canonical_ids=[x], source_id="pd")
+        plan_id = conn.execute(
+            "INSERT INTO meal_plans (week_of) VALUES (?) RETURNING id",
+            (current_sunday().isoformat(),),
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO meal_plan_items (plan_id, recipe_id) VALUES (?, ?)", (plan_id, planned)
+        )
+        target = _add_recipe(conn, "Target", rating=2.0, canonical_ids=[x, y], source_id="tg")
+
+    # Pantry is empty: pantry-only coverage sees nothing, planned coverage sees x.
+    assert tools.pantry_coverage_for_recipes([target], db_path=db_path)[target] == {
+        "have": 0,
+        "mapped": 2,
+    }
+    assert tools.pantry_coverage_for_recipes([target], include_planned=True, db_path=db_path)[
+        target
+    ] == {"have": 1, "mapped": 2}
 
 
 # ---------- get_recipe ----------

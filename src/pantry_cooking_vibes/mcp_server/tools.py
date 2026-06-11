@@ -11,7 +11,7 @@ import re
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, NamedTuple, TypedDict
 
 from pantry_cooking_vibes.dates import current_sunday
 from pantry_cooking_vibes.db import DB_PATH, connect
@@ -91,6 +91,89 @@ def _canonical_id_exists_clause(ids: list[int]) -> str:
     )
 
 
+SORT_VALUES = ("availability", "rating", "relevance")
+DEFAULT_SORT = "relevance"
+
+# The set of canonical ids the user effectively "has": pantry items plus
+# ingredients required by recipes in current/future meal plans
+# (``week_of >= this week's Sunday``, draft or confirmed — things already owned
+# or already committed to buying; past plans don't count). One bound param:
+# this week's Sunday as an ISO date string. Inner aliases are suffixed (ri2,
+# mpi2, mp2) so the fragment can nest inside queries that already use ri/mp.
+_AVAILABILITY_IDS_SQL = (
+    "SELECT canonical_id FROM pantry "
+    "UNION "
+    "SELECT ri2.canonical_id "
+    "FROM meal_plan_items mpi2 "
+    "JOIN meal_plans mp2 ON mp2.id = mpi2.plan_id "
+    "JOIN recipe_ingredients ri2 ON ri2.recipe_id = mpi2.recipe_id "
+    "WHERE mp2.week_of >= ? AND ri2.canonical_id IS NOT NULL"
+)
+
+
+def _availability_have_set() -> tuple[str, list[Any]]:
+    """The have-set SQL fragment together with its bind params.
+
+    SQLite binds positionally, so a fragment and its params must travel as a
+    pair — call sites splice both, and a future extra bind in the fragment
+    can't silently desync from any consumer's param list.
+    """
+    return _AVAILABILITY_IDS_SQL, [current_sunday().isoformat()]
+
+
+def normalize_sort(sort: str, default: str = DEFAULT_SORT) -> str:
+    """Coerce a sort value to a member of ``SORT_VALUES``.
+
+    Unknown values fall back to ``default`` rather than raising, so stale
+    bookmarks and typoed query strings degrade gracefully. Every layer
+    (tools, web route) funnels through this one policy; callers that want a
+    different fallback pass their own ``default``.
+    """
+    return sort if sort in SORT_VALUES else default
+
+
+def _order_clause(sort: str, has_query: bool) -> str:
+    """ORDER BY for a recipe search, per sort mode (see issue #53).
+
+    - ``rating``: pure rating order — ignores FTS rank even when a query is
+      present and does NOT pin favorites (the UI promises "top-rated first").
+    - ``relevance`` (legacy default): FTS rank when a query is present, else rating.
+    - ``availability``: most on-hand ingredients first; with a query, FTS rank stays
+      primary and on-hand count breaks ties. When nothing is on hand, every
+      ``have_count`` is 0 and the order degrades to the relevance order naturally.
+
+    Composed as a key list so the ``r.id`` tiebreaker is appended in exactly one
+    place: bm25 rank and rating tie across many bulk-ingested rows, and SQLite's
+    order among ties is unstable between queries — without a unique trailing key,
+    LIMIT/OFFSET pages can skip or repeat recipes.
+    """
+    keys: list[str] = []
+    if has_query and sort != "rating":
+        keys.append("f.rank")
+    if sort == "availability":
+        keys.append("have_count DESC")
+    if not has_query and sort != "rating":
+        keys.append("is_favorite DESC")
+    keys += ["r.rating DESC NULLS LAST", "r.id"]
+    return "ORDER BY " + ", ".join(keys)
+
+
+class _RecipeQuery(NamedTuple):
+    """Assembled SQL for one recipe search.
+
+    The ``count_*`` fields exclude the availability LEFT JOIN: a grouped
+    subquery joined on the primary key can't change COUNT(*), so the COUNT
+    query skips it (and its bind param) rather than re-running the aggregate.
+    """
+
+    from_where: str  # FROM (+ availability join) + WHERE, for the row SELECT
+    count_from_where: str  # same FROM/WHERE without the availability join
+    order: str
+    params: list[Any]  # binds for from_where
+    count_params: list[Any]  # binds for count_from_where
+    select_extra: str  # extra SELECT column (have_count) or ""
+
+
 def _recipe_query_parts(
     conn: sqlite3.Connection,
     query: str,
@@ -101,30 +184,51 @@ def _recipe_query_parts(
     ingredients: list[str] | None,
     ingredient_mode: str,
     pantry_only: bool,
-) -> tuple[str, str, list[Any]] | None:
+    sort: str = DEFAULT_SORT,
+) -> _RecipeQuery | None:
     """Shared FROM/WHERE (+ ORDER BY) builder for search/count over recipes.
 
-    Returns ``(from_where_sql, order_sql, params)``. Returns ``None`` when an
-    ingredient term resolves to no canonical ids — the filter is unsatisfiable
-    and callers short-circuit to zero results.
+    Returns ``None`` when an ingredient term resolves to no canonical ids —
+    the filter is unsatisfiable and callers short-circuit to zero results.
+    ``sort`` is normalized here (unknown → ``DEFAULT_SORT``), so callers
+    don't need their own guard.
     """
+    sort = normalize_sort(sort)
     params: list[Any] = []
-    where: list[str] = []
 
-    if query.strip():
-        from_where = (
-            "FROM recipes_fts f JOIN recipes r ON r.id = f.rowid "
-            "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id "
-            "WHERE recipes_fts MATCH ?"
+    # Availability sort: LEFT JOIN a non-correlated subquery counting each
+    # recipe's ingredients that fall in the have-set (pantry ∪ upcoming-plan
+    # ingredients, inlined as SQL — no Python round-trip). Always joined for
+    # this sort, so result rows always carry have_count and an empty have-set
+    # just yields all zeros. The JOIN lives in FROM (before WHERE), so its
+    # params MUST lead the params list.
+    join_sql = ""
+    join_params: list[Any] = []
+    select_extra = ""
+    if sort == "availability":
+        have_sql, join_params = _availability_have_set()
+        # S608: interpolates only the trusted have-set fragment, no user input.
+        join_sql = (
+            " LEFT JOIN (SELECT ri.recipe_id AS rid, "  # noqa: S608
+            "COUNT(DISTINCT ri.canonical_id) AS have_count "
+            f"FROM recipe_ingredients ri WHERE ri.canonical_id IN ({have_sql}) "
+            "GROUP BY ri.recipe_id) av ON av.rid = r.id"
         )
+        select_extra = ", COALESCE(av.have_count, 0) AS have_count"
+
+    has_query = bool(query.strip())
+    if has_query:
+        from_clause = (
+            "FROM recipes_fts f JOIN recipes r ON r.id = f.rowid "
+            "LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id"
+        )
+        base_where = ["recipes_fts MATCH ?"]
         params.append(_fts5_escape_query(query))
-        # r.id tiebreaker: bm25 rank and rating tie across many bulk-ingested
-        # rows, and SQLite's order among ties is unstable between queries —
-        # without a unique key, LIMIT/OFFSET pages can skip or repeat recipes.
-        order = "ORDER BY f.rank, r.rating DESC NULLS LAST, r.id"
     else:
-        from_where = "FROM recipes r LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id WHERE 1=1"
-        order = "ORDER BY is_favorite DESC, r.rating DESC NULLS LAST, r.id"
+        from_clause = "FROM recipes r LEFT JOIN recipe_favorites rf ON rf.recipe_id = r.id"
+        base_where = ["1=1"]
+
+    where: list[str] = []
 
     if max_time_min is not None:
         where.append("r.cooking_time_min IS NOT NULL AND r.cooking_time_min <= ?")
@@ -174,9 +278,15 @@ def _recipe_query_parts(
             "WHERE ri.recipe_id = r.id AND ri.canonical_id IS NOT NULL)"
         )
 
-    if where:
-        from_where += " AND " + " AND ".join(where)
-    return from_where, order, params
+    where_sql = " WHERE " + " AND ".join(base_where + where)
+    return _RecipeQuery(
+        from_where=f"{from_clause}{join_sql}{where_sql}",
+        count_from_where=f"{from_clause}{where_sql}",
+        order=_order_clause(sort, has_query),
+        params=[*join_params, *params],
+        count_params=params,
+        select_extra=select_extra,
+    )
 
 
 _RECIPE_SELECT_COLS = (
@@ -212,6 +322,7 @@ def search_recipes(
     ingredient_mode: str = "and",
     pantry_only: bool = False,
     offset: int = 0,
+    sort: str = DEFAULT_SORT,
     *,
     db_path: Path | None = None,
 ) -> list[dict]:
@@ -225,6 +336,13 @@ def search_recipes(
     ``pantry_only=True`` further restricts to recipes whose mapped ingredients
     are all present in the pantry (unmapped ingredients are ignored).
 
+    ``sort`` is one of ``SORT_VALUES``: ``'relevance'`` (default — FTS rank when a
+    query is given, else rating), ``'rating'`` (always top-rated first), or
+    ``'availability'`` (most on-hand ingredients first; see :func:`_order_clause`).
+    Unknown values coerce to the default (see :func:`normalize_sort`). With
+    ``sort='availability'`` every result dict additionally carries a
+    ``have_count`` int (0 when nothing is on hand); other sorts never include it.
+
     ``offset`` skips that many rows; past the end the result is ``[]``, so
     ``offset += limit`` iteration terminates. UIs that need a total and
     stale-page clamping want :func:`search_recipes_page` instead.
@@ -236,7 +354,7 @@ def search_recipes(
         raise ValueError("ingredient_mode must be 'and' or 'or'")
 
     with connect(db) as conn:
-        parts = _recipe_query_parts(
+        q = _recipe_query_parts(
             conn,
             query,
             max_time_min,
@@ -246,12 +364,12 @@ def search_recipes(
             ingredients,
             ingredient_mode,
             pantry_only,
+            sort,
         )
-        if parts is None:
+        if q is None:
             return []
-        from_where, order, params = parts
-        sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
-        rows = conn.execute(sql, [*params, limit, offset]).fetchall()
+        sql = f"{_RECIPE_SELECT_COLS}{q.select_extra} {q.from_where} {q.order} LIMIT ? OFFSET ?"
+        rows = conn.execute(sql, [*q.params, limit, offset]).fetchall()
     return _rows_to_recipe_dicts(rows)
 
 
@@ -266,15 +384,16 @@ def search_recipes_page(
     ingredient_mode: str = "and",
     pantry_only: bool = False,
     offset: int = 0,
+    sort: str = DEFAULT_SORT,
     *,
     db_path: Path | None = None,
 ) -> RecipePage:
     """One browse-page query: ``{"items": [...], "total": int, "offset": int}``.
 
-    Same filters as :func:`search_recipes`, but the COUNT and the SELECT run
-    inside one read transaction on one connection, built from the same query
-    parts — the total can never describe a different result set than the rows.
-    An ``offset`` past the end clamps to the final page (a stale bookmark
+    Same filters and ``sort`` modes as :func:`search_recipes`, but the COUNT and
+    the SELECT run inside one read transaction on one connection, built from the
+    same query parts — the total can never describe a different result set than
+    the rows. An ``offset`` past the end clamps to the final page (a stale bookmark
     lands on real results); the returned ``offset`` is the effective one after
     clamping, always a multiple of ``limit``.
     """
@@ -289,7 +408,7 @@ def search_recipes_page(
         # so a concurrent ingest/delete can't desync the total from the rows.
         # connect() commits on exit, which ends the transaction.
         conn.execute("BEGIN")
-        parts = _recipe_query_parts(
+        q = _recipe_query_parts(
             conn,
             query,
             max_time_min,
@@ -299,18 +418,20 @@ def search_recipes_page(
             ingredients,
             ingredient_mode,
             pantry_only,
+            sort,
         )
-        if parts is None:
+        if q is None:
             return {"items": [], "total": 0, "offset": 0}
-        from_where, order, params = parts
 
         def _count() -> int:
-            row = conn.execute(f"SELECT COUNT(*) AS n {from_where}", params).fetchone()
-            return int(row["n"])
+            # count_from_where omits the availability join — it can't change
+            # the row count and would only re-run the aggregate subquery.
+            sql = f"SELECT COUNT(*) AS n {q.count_from_where}"
+            return int(conn.execute(sql, q.count_params).fetchone()["n"])
 
         def _select(off: int) -> list[sqlite3.Row]:
-            sql = f"{_RECIPE_SELECT_COLS}{from_where} {order} LIMIT ? OFFSET ?"
-            return conn.execute(sql, [*params, limit, off]).fetchall()
+            sql = f"{_RECIPE_SELECT_COLS}{q.select_extra} {q.from_where} {q.order} LIMIT ? OFFSET ?"
+            return conn.execute(sql, [*q.params, limit, off]).fetchall()
 
         if offset == 0:
             # Common case: the first page. When it isn't full, its length IS
@@ -335,34 +456,45 @@ def list_recipe_sources(*, db_path: Path | None = None) -> list[str]:
 
 
 def pantry_coverage_for_recipes(
-    recipe_ids: list[int], *, db_path: Path | None = None
+    recipe_ids: list[int], *, include_planned: bool = False, db_path: Path | None = None
 ) -> dict[int, dict]:
     """Per-recipe pantry coverage for a batch of recipes, in one query.
 
     For each recipe, counts its *mapped* ingredients (``canonical_id`` not null)
     and how many of those canonical ingredients are currently in the pantry.
-    Unmapped ingredients are ignored, mirroring ``pantry_only`` in
-    :func:`search_recipes`. Returns ``{recipe_id: {"have": int, "mapped": int}}``
-    only for recipes that have at least one mapped ingredient; a missing id means
-    "no coverage signal" (no mapped ingredients), which callers render as no badge.
+    With ``include_planned=True`` the "have" set widens to pantry ∪ ingredients
+    of current/future meal plans — the same definition ``sort='availability'``
+    ranks by (each runs its own query, so a write or a week rollover landing
+    between the two calls can still skew one of them). Unmapped ingredients are
+    ignored, mirroring ``pantry_only`` in :func:`search_recipes`. Returns
+    ``{recipe_id: {"have": int, "mapped": int}}`` only for recipes that have at
+    least one mapped ingredient; a missing id means "no coverage signal"
+    (no mapped ingredients), which callers render as no badge.
     """
     ids = [int(r) for r in recipe_ids]
     if not ids:
         return {}
     db = db_path or DB_PATH
     placeholders = ",".join("?" * len(ids))
+    if include_planned:
+        have_set_sql, have_params = _availability_have_set()
+    else:
+        have_set_sql, have_params = "SELECT canonical_id FROM pantry", []
+    # The have-set subquery sits in the SELECT clause, so its binds precede
+    # the recipe ids.
+    params: list[Any] = [*have_params, *ids]
     sql = (
         # placeholders is only ? marks; the ids go through as bound params
         "SELECT ri.recipe_id AS recipe_id, "  # noqa: S608
         "COUNT(DISTINCT ri.canonical_id) AS mapped, "
-        "COUNT(DISTINCT CASE WHEN ri.canonical_id IN (SELECT canonical_id FROM pantry) "
+        f"COUNT(DISTINCT CASE WHEN ri.canonical_id IN ({have_set_sql}) "
         "  THEN ri.canonical_id END) AS have "
         "FROM recipe_ingredients ri "
         f"WHERE ri.recipe_id IN ({placeholders}) AND ri.canonical_id IS NOT NULL "
         "GROUP BY ri.recipe_id"
     )
     with connect(db) as conn:
-        rows = conn.execute(sql, ids).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return {int(r["recipe_id"]): {"have": int(r["have"]), "mapped": int(r["mapped"])} for r in rows}
 
 
