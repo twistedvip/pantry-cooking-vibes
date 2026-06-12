@@ -336,7 +336,9 @@ def edit_recipe_submit(
         except ValueError as e:
             error = str(e)
         else:
-            return RedirectResponse(url=f"/recipes/{recipe_id}?saved=1", status_code=303)
+            # int() cast makes the int-ness explicit and breaks CodeQL's
+            # url-redirection dataflow (recipe_id is already an int path param).
+            return RedirectResponse(url=f"/recipes/{int(recipe_id)}?saved=1", status_code=303)
 
     # Echo the submitted values back (Jinja autoescape neutralizes any markup)
     # so the user can fix the one bad field instead of retyping everything.
