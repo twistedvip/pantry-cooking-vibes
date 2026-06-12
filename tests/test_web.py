@@ -1580,3 +1580,151 @@ def test_referrer_policy_does_not_strip_origin_on_same_origin_posts():
         "no-referrer causes Chrome to null the Origin header on same-origin "
         "form POSTs — use same-origin or strict-origin-when-cross-origin"
     )
+
+
+# ---------- recipe edit (issue #49) ----------
+
+
+def test_get_recipe_edit_form_prefilled(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = _recipe_id(conn, "Broccoli Stir Fry")
+    r = client.get(f"/recipes/{rid}/edit")
+    assert r.status_code == 200
+    body = r.text
+    assert f'action="/recipes/{rid}/edit"' in body
+    assert 'value="Broccoli Stir Fry"' in body
+    assert 'value="25"' in body  # cooking_time_min
+    assert "2 cups broccoli florets" in body  # ingredients textarea
+    assert "Stir fry broccoli in a hot pan." in body  # steps textarea
+    assert "asian, quick" in body  # tags, comma-joined
+    # The mapping-loss warning must be the visible note, not a faint hint.
+    assert 'class="field-note"' in body
+
+
+def test_get_recipe_edit_form_missing_404(client: TestClient):
+    assert client.get("/recipes/99999/edit").status_code == 404
+
+
+def test_recipe_detail_links_to_edit(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = _recipe_id(conn, "Broccoli Stir Fry")
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert f'href="/recipes/{rid}/edit"' in r.text
+
+
+def test_post_recipe_edit_updates_and_redirects(client: TestClient, seeded_db_path):
+    with connect(seeded_db_path) as conn:
+        rid = _recipe_id(conn, "Broccoli Stir Fry")
+
+    r = client.post(
+        f"/recipes/{rid}/edit",
+        data={
+            "name": "Broccoli Mega Fry",
+            "cooking_time_min": "15",
+            "servings": "2",
+            "image_url": "https://example.com/pic.jpg",
+            "tags": "Quick, weeknight",
+            "ingredients": "2 cups broccoli florets\n1 tbsp soy sauce",
+            "instructions": "Chop everything.\nFry it.",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/recipes/{rid}?saved=1"
+
+    # Following the redirect flashes a save confirmation; a plain visit doesn't.
+    flashed = client.get(f"/recipes/{rid}?saved=1").text
+    assert "Recipe saved" in flashed
+    detail = client.get(f"/recipes/{rid}").text
+    assert "Recipe saved" not in detail
+    assert "Broccoli Mega Fry" in detail
+    assert "1 tbsp soy sauce" in detail
+    assert "Fry it." in detail
+    with connect(seeded_db_path) as conn:
+        row = conn.execute("SELECT * FROM recipes WHERE id = ?", (rid,)).fetchone()
+        assert row["name"] == "Broccoli Mega Fry"
+        assert row["cooking_time_min"] == 15
+        assert row["image_url"] == "https://example.com/pic.jpg"
+        tags = {
+            t["tag"]
+            for t in conn.execute(
+                "SELECT tag FROM recipe_tags WHERE recipe_id = ?", (rid,)
+            ).fetchall()
+        }
+        assert tags == {"quick", "weeknight"}
+        # The unchanged ingredient line kept its canonical mapping.
+        kept = conn.execute(
+            "SELECT canonical_id FROM recipe_ingredients "
+            "WHERE recipe_id = ? AND original_text = '2 cups broccoli florets'",
+            (rid,),
+        ).fetchone()
+        assert kept["canonical_id"] is not None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"name": ""},  # name required
+        {"image_url": "javascript:alert(1)"},  # XSS-capable scheme rejected
+        {"cooking_time_min": "abc"},  # non-numeric
+        {"servings": "0"},  # below minimum
+    ],
+)
+def test_post_recipe_edit_invalid_keeps_recipe_and_rerenders(
+    client: TestClient, seeded_db_path, overrides
+):
+    with connect(seeded_db_path) as conn:
+        rid = _recipe_id(conn, "Broccoli Stir Fry")
+        before = dict(conn.execute("SELECT * FROM recipes WHERE id = ?", (rid,)).fetchone())
+
+    data = {
+        "name": "Renamed",
+        "cooking_time_min": "10",
+        "servings": "2",
+        "image_url": "",
+        "tags": "quick",
+        "ingredients": "1 thing",
+        "instructions": "Do it.",
+    }
+    data.update(overrides)
+    r = client.post(f"/recipes/{rid}/edit", data=data, follow_redirects=False)
+    assert r.status_code == 422
+    assert 'class="form-error"' in r.text
+
+    with connect(seeded_db_path) as conn:
+        after = dict(conn.execute("SELECT * FROM recipes WHERE id = ?", (rid,)).fetchone())
+    assert after == before  # rejected edit leaves the recipe untouched
+
+
+def test_post_recipe_edit_missing_404(client: TestClient):
+    r = client.post("/recipes/99999/edit", data={"name": "x"}, follow_redirects=False)
+    assert r.status_code == 404
+
+
+def test_recipe_edit_xss_payloads_are_escaped_everywhere(client: TestClient, seeded_db_path):
+    """A recipe whose fields contain markup must render inert on the detail
+    page AND inside the edit form's value/textarea echoes (no raw <script>)."""
+    with connect(seeded_db_path) as conn:
+        rid = _recipe_id(conn, "Broccoli Stir Fry")
+
+    payload = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
+    r = client.post(
+        f"/recipes/{rid}/edit",
+        data={
+            "name": f"Evil {payload}",
+            "cooking_time_min": "",
+            "servings": "",
+            "image_url": "",
+            "tags": payload,
+            "ingredients": payload,
+            "instructions": payload,
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    for page in (client.get(f"/recipes/{rid}").text, client.get(f"/recipes/{rid}/edit").text):
+        assert "<script>alert(1)</script>" not in page
+        assert "<img src=x onerror" not in page
+        assert "&lt;script&gt;" in page  # escaped, not dropped

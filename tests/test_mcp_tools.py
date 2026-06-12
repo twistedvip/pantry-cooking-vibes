@@ -1077,3 +1077,103 @@ def test_add_to_current_week_plan_concurrent(seeded_db_path):
         ).fetchone()[0]
     assert plan_count == 1
     assert item_count == 2
+
+
+# ---------- update_recipe (issue #49) ----------
+
+
+def _stir_fry_id(db_path):
+    with connect(db_path) as conn:
+        return conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()[
+            "id"
+        ]
+
+
+def test_update_recipe_full_replace(seeded_db_path):
+    rid = _stir_fry_id(seeded_db_path)
+    updated = tools.update_recipe(
+        rid,
+        name="Broccoli Mega Fry",
+        cooking_time_min=15,
+        servings=2,
+        image_url="https://example.com/pic.jpg",
+        instructions=["Chop everything.", "Fry it.", ""],
+        tags=["Quick", "weeknight", "quick"],  # case/dupes collapse
+        ingredients=["2 cups broccoli florets", "1 tbsp soy sauce"],
+        db_path=seeded_db_path,
+    )
+    assert updated["name"] == "Broccoli Mega Fry"
+    assert updated["cooking_time_min"] == 15
+    assert updated["servings"] == 2
+    assert updated["image_url"] == "https://example.com/pic.jpg"
+    assert updated["instructions_md"] == "Chop everything.\nFry it."
+    assert updated["tags"] == ["quick", "weeknight"]
+    texts = [i["original_text"] for i in updated["ingredients"]]
+    assert texts == ["2 cups broccoli florets", "1 tbsp soy sauce"]
+    # The unchanged line keeps its canonical mapping; the new line starts unmapped.
+    by_text = {i["original_text"]: i for i in updated["ingredients"]}
+    assert by_text["2 cups broccoli florets"]["canonical_id"] is not None
+    assert by_text["1 tbsp soy sauce"]["canonical_id"] is None
+    # Internal columns are not editable through this path.
+    assert updated["source"] == "manual"
+    assert updated["rating"] == 4.5
+
+
+def test_update_recipe_fts_index_tracks_rename(seeded_db_path):
+    rid = _stir_fry_id(seeded_db_path)
+    tools.update_recipe(rid, name="Zanzibar Skillet", db_path=seeded_db_path)
+    assert rid in [r["id"] for r in tools.search_recipes("Zanzibar", db_path=seeded_db_path)]
+    assert rid not in [r["id"] for r in tools.search_recipes("Stir Fry", db_path=seeded_db_path)]
+
+
+def test_update_recipe_strips_control_chars(seeded_db_path):
+    rid = _stir_fry_id(seeded_db_path)
+    updated = tools.update_recipe(rid, name="Soup\x00with\x07stuff", db_path=seeded_db_path)
+    assert "\x00" not in updated["name"]
+    assert "\x07" not in updated["name"]
+    assert "Soup" in updated["name"] and "stuff" in updated["name"]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"name": ""},
+        {"name": "   "},
+        {"name": "ok", "cooking_time_min": -1},
+        {"name": "ok", "servings": 0},
+        {"name": "ok", "image_url": "javascript:alert(1)"},
+        {"name": "ok", "image_url": "ftp://example.com/x.jpg"},
+        {"name": "ok", "image_url": "https://"},  # no host
+        {"name": "x" * 301},  # over _MAX_NAME_LEN
+    ],
+)
+def test_update_recipe_rejects_invalid_input_and_keeps_recipe(seeded_db_path, kwargs):
+    rid = _stir_fry_id(seeded_db_path)
+    before = tools.get_recipe(rid, db_path=seeded_db_path)
+    with pytest.raises(ValueError):
+        tools.update_recipe(rid, db_path=seeded_db_path, **kwargs)
+    # A failed edit must leave the stored recipe untouched.
+    assert tools.get_recipe(rid, db_path=seeded_db_path) == before
+
+
+def test_update_recipe_missing_recipe_raises(db_path):
+    with pytest.raises(ValueError, match="not found"):
+        tools.update_recipe(99999, name="ghost", db_path=db_path)
+
+
+def test_update_recipe_empty_lists_clear_sets(seeded_db_path):
+    rid = _stir_fry_id(seeded_db_path)
+    updated = tools.update_recipe(
+        rid,
+        name="Bare Bones",
+        instructions=[],
+        tags=[],
+        ingredients=[],
+        db_path=seeded_db_path,
+    )
+    assert updated["instructions_md"] is None
+    assert updated["tags"] == []
+    assert updated["ingredients"] == []
+    assert updated["image_url"] is None
+    assert updated["cooking_time_min"] is None
+    assert updated["servings"] is None
