@@ -232,6 +232,7 @@ def list_recipes(
 def recipe_detail(
     request: Request,
     recipe_id: int,
+    saved: str = Query("", description="Set to 1 to flash a save confirmation"),
     db_path: Path = Depends(get_db_path),
 ) -> object:
     recipe = tools.get_recipe(recipe_id, db_path=db_path)
@@ -250,8 +251,114 @@ def recipe_detail(
             "current_week": current_week,
             "next_week": next_week,
             "suggest_next_week": suggest_next_week,
+            "saved": saved == "1",
         },
     )
+
+
+def _edit_form_values(recipe: dict) -> dict:
+    """Prefill values for the edit form, shaped as the form fields submit them."""
+    return {
+        "name": recipe["name"],
+        "cooking_time_min": (
+            "" if recipe["cooking_time_min"] is None else str(recipe["cooking_time_min"])
+        ),
+        "servings": "" if recipe["servings"] is None else str(recipe["servings"]),
+        "image_url": recipe["image_url"] or "",
+        "tags": ", ".join(recipe["tags"]),
+        "ingredients": "\n".join(
+            (i["original_text"] or i["canonical_name"] or "") for i in recipe["ingredients"]
+        ),
+        "instructions": recipe["instructions_md"] or "",
+    }
+
+
+@router.get("/{recipe_id}/edit")
+def edit_recipe_form(
+    request: Request,
+    recipe_id: int,
+    db_path: Path = Depends(get_db_path),
+) -> object:
+    recipe = tools.get_recipe(recipe_id, db_path=db_path)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
+    return render(
+        request,
+        "recipes/edit.html",
+        {"recipe": recipe, "form": _edit_form_values(recipe), "error": None},
+    )
+
+
+@router.post("/{recipe_id}/edit")
+def edit_recipe_submit(
+    request: Request,
+    recipe_id: int,
+    name: str = Form(""),
+    cooking_time_min: str = Form(""),
+    servings: str = Form(""),
+    image_url: str = Form(""),
+    tags: str = Form(""),
+    ingredients: str = Form(""),
+    instructions: str = Form(""),
+    db_path: Path = Depends(get_db_path),
+) -> object:
+    """Apply a recipe edit; on validation failure re-render the form unchanged.
+
+    All writes happen inside ``tools.update_recipe``'s single transaction, so
+    a rejected edit leaves the stored recipe exactly as it was.
+    """
+    recipe = tools.get_recipe(recipe_id, db_path=db_path)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
+
+    error: str | None = None
+    time_val: int | None = None
+    servings_val: int | None = None
+    try:
+        time_val = _parse_optional_int(cooking_time_min, "cooking time", min_value=0)
+        servings_val = _parse_optional_int(servings, "servings", min_value=1)
+    except HTTPException as e:
+        error = str(e.detail)
+
+    if error is None:
+        try:
+            tools.update_recipe(
+                recipe_id,
+                name=name,
+                cooking_time_min=time_val,
+                servings=servings_val,
+                image_url=image_url or None,
+                instructions=instructions.splitlines(),
+                tags=tags.split(","),
+                ingredients=ingredients.splitlines(),
+                db_path=db_path,
+            )
+        except ValueError as e:
+            error = str(e)
+        else:
+            return RedirectResponse(url=f"/recipes/{recipe_id}?saved=1", status_code=303)
+
+    # Echo the submitted values back (Jinja autoescape neutralizes any markup)
+    # so the user can fix the one bad field instead of retyping everything.
+    response = render(
+        request,
+        "recipes/edit.html",
+        {
+            "recipe": recipe,
+            "form": {
+                "name": name,
+                "cooking_time_min": cooking_time_min,
+                "servings": servings,
+                "image_url": image_url,
+                "tags": tags,
+                "ingredients": ingredients,
+                "instructions": instructions,
+            },
+            "error": error,
+        },
+    )
+    response.status_code = 422
+    return response
 
 
 @router.post("/{recipe_id}/delete")

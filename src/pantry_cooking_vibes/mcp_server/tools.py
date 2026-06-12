@@ -12,6 +12,7 @@ import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple, TypedDict
+from urllib.parse import urlsplit
 
 from pantry_cooking_vibes.dates import current_sunday
 from pantry_cooking_vibes.db import DB_PATH, connect
@@ -525,6 +526,162 @@ def get_recipe(recipe_id: int, *, db_path: Path | None = None) -> dict | None:
     recipe["tags"] = [t["tag"] for t in tags]
     recipe["is_favorite"] = fav is not None
     return recipe
+
+
+# Field caps for user-editable recipe fields (issue #49). Generous for real
+# recipes, tight enough that a pasted novel or crafted megastring bounces at
+# the validation layer instead of landing in the DB / FTS index.
+_MAX_NAME_LEN = 300
+_MAX_IMAGE_URL_LEN = 2000
+_MAX_LINE_LEN = 1000
+_MAX_TAG_LEN = 100
+_MAX_LIST_LEN = 200
+
+# All C0 controls plus DEL. Each edited value is a single logical line by the
+# time it reaches validation (the web layer splits textareas first), so
+# stripping \t/\r/\n here loses nothing.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _clean_edit_line(value: object, label: str, max_len: int) -> str:
+    """One sanitized single-line value: control chars removed, stripped, capped.
+
+    SQL injection is already impossible (every statement binds with ``?``);
+    this guards the other half — NUL bytes and control characters that corrupt
+    rendering/logs, and unbounded lengths. Raises ``ValueError`` over the cap.
+    ``label`` is the human field name as the edit form shows it (e.g.
+    "Picture URL", not "image_url") — these messages render verbatim in the UI.
+    """
+    cleaned = _CONTROL_CHARS_RE.sub(" ", str(value)).strip()
+    if len(cleaned) > max_len:
+        raise ValueError(f"{label} is too long (max {max_len} characters)")
+    return cleaned
+
+
+def _clean_edit_list(values: list[str] | None, label: str, max_len: int) -> list[str]:
+    cleaned = [_clean_edit_line(v, label, max_len) for v in (values or [])]
+    cleaned = [v for v in cleaned if v]
+    if len(cleaned) > _MAX_LIST_LEN:
+        raise ValueError(f"Too many {label.lower()}s (max {_MAX_LIST_LEN})")
+    return cleaned
+
+
+def update_recipe(
+    recipe_id: int,
+    *,
+    name: str,
+    cooking_time_min: int | None = None,
+    servings: int | None = None,
+    image_url: str | None = None,
+    instructions: list[str] | None = None,
+    tags: list[str] | None = None,
+    ingredients: list[str] | None = None,
+    db_path: Path | None = None,
+) -> dict:
+    """Replace a recipe's user-editable fields in one transaction (issue #49).
+
+    Keyword-only full replacement: ``instructions`` (one step per entry,
+    stored newline-joined in ``instructions_md``), ``tags`` (lowercased,
+    deduped), and ``ingredients`` (one ``original_text`` per entry) overwrite
+    the prior sets. An ingredient line that exactly matches an existing row's
+    ``original_text`` keeps that row's canonical mapping, quantity, unit, and
+    notes; new/edited lines start unmapped. Internal columns (``source``,
+    ``source_id``, ``rating``, ``imported_at``, ...) are not editable here.
+
+    All values bind via ``?`` placeholders (no SQL injection) and pass through
+    :func:`_clean_edit_line` (control chars stripped, lengths capped).
+    ``image_url`` must be an absolute http(s) URL so a stored ``javascript:``
+    URL can never reach an ``src``/``href`` sink. Validation failures raise
+    ``ValueError`` before/inside one transaction that ``connect()`` rolls back
+    on error — a failed edit always leaves the existing recipe intact.
+
+    Returns the updated recipe as :func:`get_recipe` shapes it.
+    """
+    # Error strings use the edit form's own field labels — they render
+    # verbatim in the UI, so no internal column names (issue #49 critique).
+    clean_name = _clean_edit_line(name, "Name", _MAX_NAME_LEN)
+    if not clean_name:
+        raise ValueError("Name can't be empty")
+
+    time_val = None if cooking_time_min is None else int(cooking_time_min)
+    if time_val is not None and time_val < 0:
+        raise ValueError("Cooking time must be 0 or more")
+    servings_val = None if servings is None else int(servings)
+    if servings_val is not None and servings_val < 1:
+        raise ValueError("Servings must be 1 or more")
+
+    clean_image: str | None = None
+    if image_url is not None and str(image_url).strip():
+        clean_image = _clean_edit_line(image_url, "Picture URL", _MAX_IMAGE_URL_LEN)
+        parts = urlsplit(clean_image)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError("Picture URL must start with http:// or https://")
+
+    steps = _clean_edit_list(instructions, "Step", _MAX_LINE_LEN)
+    ingredient_lines = _clean_edit_list(ingredients, "Ingredient", _MAX_LINE_LEN)
+    tag_list: list[str] = []
+    seen_tags: set[str] = set()
+    for tag in _clean_edit_list(tags, "Tag", _MAX_TAG_LEN):
+        lowered = tag.lower()
+        if lowered not in seen_tags:
+            seen_tags.add(lowered)
+            tag_list.append(lowered)
+
+    instructions_md = "\n".join(steps) if steps else None
+
+    db = db_path or DB_PATH
+    with connect(db) as conn:
+        exists = conn.execute("SELECT 1 FROM recipes WHERE id = ?", (int(recipe_id),)).fetchone()
+        if exists is None:
+            raise ValueError(f"recipe {recipe_id} not found")
+
+        # Existing ingredient rows keyed by stripped original_text, consumed
+        # in order, so an unchanged line carries over its canonical mapping
+        # (duplicate lines each consume one prior row).
+        prior_by_text: dict[str, list[sqlite3.Row]] = {}
+        for row in conn.execute(
+            "SELECT canonical_id, original_text, quantity, unit, notes "
+            "FROM recipe_ingredients WHERE recipe_id = ? ORDER BY id",
+            (int(recipe_id),),
+        ).fetchall():
+            prior_by_text.setdefault((row["original_text"] or "").strip(), []).append(row)
+
+        # The recipes_au trigger keeps recipes_fts in sync with name/instructions.
+        conn.execute(
+            "UPDATE recipes SET name = ?, cooking_time_min = ?, servings = ?, "
+            "image_url = ?, instructions_md = ? WHERE id = ?",
+            (clean_name, time_val, servings_val, clean_image, instructions_md, int(recipe_id)),
+        )
+
+        conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?", (int(recipe_id),))
+        for line in ingredient_lines:
+            prior_rows = prior_by_text.get(line)
+            prior = prior_rows.pop(0) if prior_rows else None
+            conn.execute(
+                "INSERT INTO recipe_ingredients "
+                "(recipe_id, canonical_id, original_text, quantity, unit, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    int(recipe_id),
+                    prior["canonical_id"] if prior else None,
+                    line,
+                    prior["quantity"] if prior else None,
+                    prior["unit"] if prior else None,
+                    prior["notes"] if prior else None,
+                ),
+            )
+
+        conn.execute("DELETE FROM recipe_tags WHERE recipe_id = ?", (int(recipe_id),))
+        for tag in tag_list:
+            conn.execute(
+                "INSERT INTO recipe_tags (recipe_id, tag) VALUES (?, ?)",
+                (int(recipe_id), tag),
+            )
+
+    updated = get_recipe(int(recipe_id), db_path=db)
+    if updated is None:  # pragma: no cover — row existed inside the transaction
+        raise ValueError(f"recipe {recipe_id} not found")
+    return updated
 
 
 def delete_recipe(recipe_id: int, *, db_path: Path | None = None) -> None:

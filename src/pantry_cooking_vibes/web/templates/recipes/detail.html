@@ -4,6 +4,8 @@
 {% block content %}
 <p class="breadcrumbs"><a href="/recipes">← Recipes</a></p>
 
+{% if saved %}<div class="flash ok">✓ Recipe saved</div>{% endif %}
+
 <article class="recipe-detail">
   <div class="detail-grid">
     <div class="detail-main">
@@ -47,6 +49,7 @@
             {{ '★ favorited' if recipe.is_favorite else '☆ favorite' }}
           </button>
         </form>
+        <a class="btn" href="/recipes/{{ recipe.id }}/edit" title="Edit this recipe">✎ Edit</a>
         <form method="post" action="/recipes/{{ recipe.id }}/add-to-current-week" class="add-to-plan-form">
           <input type="hidden" name="redirect_to" value="/recipes/{{ recipe.id }}">
           <select name="week_of" class="week-select">
