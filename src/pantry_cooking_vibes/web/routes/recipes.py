@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import sqlite3
@@ -228,6 +229,65 @@ def list_recipes(
     )
 
 
+# Display order, label, and unit for the compact macro dict stored in
+# recipes.nutrition_json ({calories, protein_g, fat_g, carbs_g, fiber_g,
+# sodium_mg}). Order is the one nutrition labels conventionally read in.
+_NUTRITION_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("calories", "Calories", "kcal"),
+    ("protein_g", "Protein", "g"),
+    ("carbs_g", "Carbs", "g"),
+    ("fat_g", "Fat", "g"),
+    ("fiber_g", "Fiber", "g"),
+    ("sodium_mg", "Sodium", "mg"),
+)
+
+
+def _coerce_nutrition_value(value: object) -> float | None:
+    """Coerce a stored macro value (number, numeric string, or blank) to float."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _nutrition_rows(nutrition_json: object) -> list[dict[str, str]]:
+    """Parse ``recipes.nutrition_json`` into ordered, display-ready macro rows.
+
+    The column is stored as a JSON string but tolerated as an already-parsed
+    dict here (``get_recipe`` returns the raw column verbatim). Returns one row
+    ``{label, value, unit}`` per macro that carries a usable number, in the
+    canonical label order. A missing column, malformed JSON, a non-object
+    payload, or an all-empty dict yields ``[]`` — the template renders no panel
+    in that case. ``value`` is formatted without a trailing ``.0`` (``12.0`` →
+    ``12``) so whole numbers read cleanly.
+    """
+    if not nutrition_json:
+        return []
+    if isinstance(nutrition_json, str):
+        try:
+            data = json.loads(nutrition_json)
+        except (ValueError, TypeError):
+            return []
+    else:
+        data = nutrition_json
+    if not isinstance(data, dict):
+        return []
+    macros: dict[str, object] = {str(k): v for k, v in data.items()}
+    rows: list[dict[str, str]] = []
+    for key, label, unit in _NUTRITION_FIELDS:
+        value = _coerce_nutrition_value(macros.get(key))
+        if value is None:
+            continue
+        rows.append({"label": label, "value": f"{value:g}", "unit": unit})
+    return rows
+
+
 @router.get("/{recipe_id}")
 def recipe_detail(
     request: Request,
@@ -247,6 +307,7 @@ def recipe_detail(
         "recipes/detail.html",
         {
             "recipe": recipe,
+            "nutrition": _nutrition_rows(recipe.get("nutrition_json")),
             "pantry_canonical_ids": pantry_canonical_ids,
             "current_week": current_week,
             "next_week": next_week,

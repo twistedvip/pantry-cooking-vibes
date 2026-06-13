@@ -1070,6 +1070,56 @@ summary:focus-visible,
 }
 .step-text { flex: 1; }
 
+/* ---------- Nutrition (per-serving macro panel) ---------- */
+.nutrition-section {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  margin-top: 24px;
+}
+.nutrition-section h2 { margin-top: 0; font-size: 26px; }
+.nutrition-note {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.nutrition-grid {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+}
+.nutrition-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  text-align: center;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-2);
+  padding: 12px 10px;
+}
+.nutrition-value {
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--ink);
+}
+.nutrition-unit { font-size: 14px; margin-left: 2px; color: var(--ink-soft); }
+.nutrition-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
 .source-link { color: var(--ink-soft); font-size: 13px; word-break: break-all; margin-top: 16px; }
 
 /* ---------- Pantry (categorized, read-first rows) ---------- */

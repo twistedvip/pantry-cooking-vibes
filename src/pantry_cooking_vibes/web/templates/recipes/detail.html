@@ -99,6 +99,20 @@
     </aside>
   </div>
 
+  {% if nutrition %}
+  <section class="nutrition-section">
+    <h2>Nutrition <span class="nutrition-note">per serving</span></h2>
+    <ul class="nutrition-grid">
+      {% for item in nutrition %}
+      <li class="nutrition-item">
+        <span class="nutrition-value">{{ item.value }}<span class="nutrition-unit">{{ item.unit }}</span></span>
+        <span class="nutrition-label">{{ item.label }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {% if recipe.instructions_md %}
   <section class="method-section">
     <h2>Method</h2>
