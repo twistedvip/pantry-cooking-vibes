@@ -1852,10 +1852,19 @@ def test_import_form_renders(client: TestClient):
     assert r.status_code == 200
     assert 'action="/recipes/import"' in r.text
     assert 'name="url"' in r.text
+    # Progressive-enhancement script wires the "Importing…" pending state.
+    assert "import.js" in r.text
 
 
 def test_recipes_list_links_to_import(client: TestClient):
     r = client.get("/recipes")
+    assert r.status_code == 200
+    assert 'href="/recipes/import"' in r.text
+
+
+def test_home_links_to_import(client: TestClient):
+    """The populated home surfaces an import entry point, not just the list."""
+    r = client.get("/")
     assert r.status_code == 200
     assert 'href="/recipes/import"' in r.text
 
@@ -1898,6 +1907,9 @@ def test_import_url_no_recipe_shows_friendly_error(client: TestClient, monkeypat
     assert "No recipe data found" in r.text
     # The submitted URL is echoed back so the user can correct it.
     assert "https://example.com/nope" in r.text
+    # The field is flagged invalid so the error border (and screen readers) point
+    # at where to fix it, not just the banner.
+    assert 'aria-invalid="true"' in r.text
 
 
 def test_import_url_network_failure_shows_friendly_error(client: TestClient, monkeypatch):

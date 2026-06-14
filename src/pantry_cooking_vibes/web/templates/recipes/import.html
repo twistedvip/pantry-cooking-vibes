@@ -8,16 +8,16 @@
 <p class="screen-sub">Paste a link to a recipe page and we'll pull in the ingredients, steps, timing, and photo.</p>
 
 {% if error %}
-<p class="form-error" role="alert">{{ error }}</p>
+<p id="import-error" class="form-error" role="alert">{{ error }}</p>
 {% endif %}
 
 <form class="import-form" method="post" action="/recipes/import">
   <label>
     Recipe URL
     <input type="text" name="url" value="{{ url }}" inputmode="url" autofocus
-           required maxlength="2000"
+           required maxlength="2000"{% if error %} aria-invalid="true" aria-describedby="import-error"{% endif %}
            placeholder="https://www.example.com/best-roast-chicken">
-    <span class="field-hint">A direct link to one recipe. Works on sites that publish schema.org recipe data — most major cooking sites do.</span>
+    <span class="field-hint">A direct link to one recipe. Works on sites that publish schema.org recipe data, which most major cooking sites do.</span>
   </label>
   <div class="btn-row">
     <button type="submit" class="btn primary">Import recipe</button>
@@ -26,7 +26,11 @@
 </form>
 
 <aside class="import-note box pad soft">
-  <p>Importing reads the page's structured recipe data — it doesn't copy the whole article. A page that can't be imported usually just doesn't publish that data.</p>
+  <p>Importing reads the page's structured recipe data. It doesn't copy the whole article, and a page that can't be imported usually just doesn't publish that data.</p>
   <p class="hint">Bringing in a scraped batch? That still runs through the CLI: <code>uv run meal-cli ingest &lt;file.jsonl&gt;</code>.</p>
 </aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ request.url_for('static', path='import.js') }}" defer></script>
 {% endblock %}

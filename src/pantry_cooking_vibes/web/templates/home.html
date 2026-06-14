@@ -9,10 +9,10 @@
 <p class="screen-sub">Let's get your recipes in. Once they're here, this page shows what you can cook, what to use up, and where the week stands.</p>
 <section class="welcome box pad">
   <h2>Start by importing recipes</h2>
-  <p>Add your first one straight from a link — paste a recipe URL and we'll pull in the ingredients, steps, and photo.</p>
+  <p>Add your first one straight from a link: paste a recipe URL and we'll pull in the ingredients, steps, and photo.</p>
   <p><a class="btn primary" href="/recipes/import">Import from a URL</a></p>
   <p class="hint">Prefer the terminal, or bringing in a scraped batch?</p>
-  <pre class="instructions">uv run meal-cli import &lt;url&gt;        # one recipe from a page
+  <pre class="instructions">uv run meal-cli import-url &lt;url&gt;      # one recipe from a page
 uv run meal-cli ingest &lt;file.jsonl&gt;   # a batch you've scraped</pre>
   <p class="hint">Claude can also add recipes for you over the MCP server (<code>meal-cli serve-mcp</code>). Full setup is in the project <code>README</code>.</p>
 </section>
@@ -25,6 +25,8 @@ uv run meal-cli ingest &lt;file.jsonl&gt;   # a batch you've scraped</pre>
   <a href="/pantry"><strong>{{ "{:,}".format(pantry_count) }}</strong> in your pantry</a>
   <span class="glance-sep" aria-hidden="true">·</span>
   <a href="/plans"><strong>{{ plan_count }}</strong> meal plan{{ '' if plan_count == 1 else 's' }}</a>
+  <span class="glance-sep" aria-hidden="true">·</span>
+  <a class="glance-action" href="/recipes/import">+ Import a recipe</a>
 </p>
 
 {# ---- Ready to cook (primary decision) ---- #}

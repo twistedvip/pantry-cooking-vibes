@@ -1892,6 +1892,22 @@ pre.instructions {
   margin-top: 6px;
 }
 .import-form .btn-row { display: flex; gap: 10px; align-items: center; }
+/* Error state: the message names the problem; the field border points at where
+   to fix it. At rest it reads danger-red; on focus the shared accent ring wins. */
+.import-form input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 1px 1px 0 var(--danger);
+}
+/* Pending state set by import.js once the (network-bound) import is in flight,
+   so the button reads as working rather than frozen. */
+.import-form button[type="submit"]:disabled {
+  opacity: .65;
+  cursor: progress;
+}
 .import-note { max-width: 640px; margin-top: 22px; }
 .import-note p { margin: 0 0 8px; }
 .import-note p:last-child { margin-bottom: 0; }
+
+/* Quiet maintenance action sharing the home glance strip with the count links:
+   discoverable, but not competing with the cook-now decision below it. */
+.glance-action { white-space: nowrap; }
