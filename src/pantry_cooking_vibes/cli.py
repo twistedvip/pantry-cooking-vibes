@@ -23,6 +23,8 @@ def _run_web(host: str, port: int, reload: bool, db: Path, auto_init: bool) -> N
 
     import uvicorn
 
+    from pantry_cooking_vibes.db import apply_schema, run_migrations
+
     db_resolved = Path(db).resolve()
     if not db_resolved.exists():
         if auto_init:
@@ -34,11 +36,17 @@ def _run_web(host: str, port: int, reload: bool, db: Path, auto_init: bool) -> N
             typer.echo(f"Database not found: {db_resolved}", err=True)
             typer.echo("Run 'meal-cli db-init' first.", err=True)
             raise typer.Exit(1)
+    else:
+        # Re-apply the baseline schema (all CREATE ... IF NOT EXISTS) so tables
+        # added since this DB was created — e.g. the import inbox — appear
+        # without a migration. Idempotent and data-safe: it only fills in what's
+        # missing. This is why additive schema changes don't need migration
+        # files; a plain `start` self-heals an existing DB.
+        with connect(db_resolved) as conn:
+            apply_schema(conn)
 
-    # Apply any migrations the DB is behind on, so a stale file doesn't
-    # surface as a 500 at query time (e.g. missing recipe_favorites table).
-    from pantry_cooking_vibes.db import run_migrations
-
+    # Then run any real migrations (column changes, backfills) the DB is behind
+    # on, so a stale file never surfaces as a 500 at query time.
     with connect(db_resolved) as conn:
         ran = run_migrations(conn)
     if ran:

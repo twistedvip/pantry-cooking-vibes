@@ -2,8 +2,45 @@
 
 from __future__ import annotations
 
-from pantry_cooking_vibes.db import connect
+import sqlite3
+
+from pantry_cooking_vibes.db import apply_schema, connect
 from pantry_cooking_vibes.importers import import_inbox as inbox
+
+
+def test_apply_schema_adds_inbox_tables_to_existing_db(db_path):
+    """Re-applying the baseline schema to a DB missing the staging tables adds
+    them without a migration, and without disturbing existing data.
+
+    This is the self-heal `start` relies on: schema.sql is all
+    CREATE ... IF NOT EXISTS, so a database created before this feature gains
+    the new tables on the next boot. Simulated by dropping the inbox tables from
+    an otherwise-current DB, then re-applying the schema.
+    """
+    with connect(db_path) as conn:
+        conn.execute("DROP TABLE import_items")
+        conn.execute("DROP TABLE import_batches")
+
+    with connect(db_path) as conn:
+        assert not _table_exists(conn, "import_batches")
+        seeded_before = conn.execute("SELECT COUNT(*) FROM canonical_ingredients").fetchone()[0]
+
+        apply_schema(conn)
+
+        assert _table_exists(conn, "import_batches")
+        assert _table_exists(conn, "import_items")
+        # Existing data is untouched (IF NOT EXISTS never recreated seeded rows).
+        seeded_after = conn.execute("SELECT COUNT(*) FROM canonical_ingredients").fetchone()[0]
+        assert seeded_after == seeded_before
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone()
+        is not None
+    )
 
 
 def _ready_item(name: str, url: str, **over) -> dict:
