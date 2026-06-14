@@ -1075,7 +1075,7 @@ summary:focus-visible,
   background: var(--paper);
   border: 2px solid var(--line);
   border-radius: 10px;
-  padding: 18px 20px;
+  padding: 16px 18px;
   box-shadow: var(--shadow);
   margin-top: 24px;
 }
@@ -1086,37 +1086,70 @@ summary:focus-visible,
   font-weight: 400;
   color: var(--ink-soft);
 }
-.nutrition-grid {
-  list-style: none;
-  padding: 0;
-  margin: 12px 0 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 12px;
-}
-.nutrition-item {
+/* Calories lead: the one number people scan for, given primacy in size. */
+.nutrition-lead {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: center;
-  text-align: center;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper-2);
-  padding: 12px 10px;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 0;
 }
-.nutrition-value {
+.nutrition-lead-value {
   font-family: 'Caveat', cursive;
   font-weight: 700;
-  font-size: 28px;
-  line-height: 1;
+  font-size: 44px;
+  line-height: 0.85;
   color: var(--ink);
 }
-.nutrition-unit { font-size: 14px; margin-left: 2px; color: var(--ink-soft); }
-.nutrition-label {
+.nutrition-lead-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin-left: 6px;
+}
+
+/* Remaining macros as a ledger: label left, value right, hairline rules.
+   Two columns on wide screens, one on mobile; no tiles, no nesting. */
+.nutrition-macros {
+  margin: 12px 0 0;
+  padding: 0;
+  max-width: 640px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 40px;
+}
+.nutrition-macro {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.nutrition-macro-label {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.nutrition-macro-value {
+  margin: 0;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink);
+}
+.nutrition-unit {
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+  color: var(--ink-soft);
+}
+.nutrition-source {
+  margin: 12px 0 0;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 

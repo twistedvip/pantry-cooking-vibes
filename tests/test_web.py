@@ -409,7 +409,43 @@ def test_recipe_detail_renders_nutrition(client: TestClient, seeded_db_path):
     assert "per serving" in r.text
     # Whole numbers render without a trailing ".0"; fractional values are kept.
     assert "210" in r.text and "7.5" in r.text
-    assert "kcal" in r.text and "mg" in r.text
+    # Macro units render (sodium in mg); calories shows as a unitless lead since
+    # the "Calories" label already names the unit.
+    assert "mg" in r.text
+
+
+def test_recipe_detail_nutrition_calories_is_the_lead(client: TestClient, seeded_db_path):
+    """Calories renders as the lead figure, not as an ordinary ledger row.
+
+    Guards the route-owned lead/ledger split: the placement must not depend on
+    matching the display label in the template.
+    """
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": 210, "protein_g": 9, "sodium_mg": 320}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert '<span class="nutrition-lead-value">210</span>' in r.text
+    # Calories must not also appear as a macro ledger row.
+    assert ">Calories</dt>" not in r.text
+
+
+def test_recipe_detail_nutrition_without_calories_renders_ledger_only(
+    client: TestClient, seeded_db_path
+):
+    """Missing calories drops the lead but still renders the macro ledger."""
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": null, "protein_g": 9, "sodium_mg": 320}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" in r.text
+    assert "nutrition-lead" not in r.text
+    assert ">Protein</dt>" in r.text
 
 
 def test_recipe_detail_nutrition_omits_missing_macros(client: TestClient, seeded_db_path):

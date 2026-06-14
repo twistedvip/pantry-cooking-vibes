@@ -232,6 +232,9 @@ def list_recipes(
 # Display order, label, and unit for the compact macro dict stored in
 # recipes.nutrition_json ({calories, protein_g, fat_g, carbs_g, fiber_g,
 # sodium_mg}). Order is the one nutrition labels conventionally read in.
+# NOTE: calories leads the panel as a unitless figure (its "Calories" label
+# already names the unit), so the "kcal" below is intentionally not rendered;
+# it is kept for completeness and in case the lead ever shows a unit again.
 _NUTRITION_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("calories", "Calories", "kcal"),
     ("protein_g", "Protein", "g"),
@@ -241,12 +244,15 @@ _NUTRITION_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("sodium_mg", "Sodium", "mg"),
 )
 
+# The macro key the detail panel renders as the lead, separate from the ledger.
+_NUTRITION_LEAD_KEY = "calories"
+
 
 def _coerce_nutrition_value(value: object) -> float | None:
     """Coerce a stored macro value (number, numeric string, or blank) to float."""
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     if isinstance(value, str) and value.strip():
         try:
@@ -261,7 +267,7 @@ def _nutrition_rows(nutrition_json: object) -> list[dict[str, str]]:
 
     The column is stored as a JSON string but tolerated as an already-parsed
     dict here (``get_recipe`` returns the raw column verbatim). Returns one row
-    ``{label, value, unit}`` per macro that carries a usable number, in the
+    ``{key, label, value, unit}`` per macro that carries a usable number, in the
     canonical label order. A missing column, malformed JSON, a non-object
     payload, or an all-empty dict yields ``[]`` — the template renders no panel
     in that case. ``value`` is formatted without a trailing ``.0`` (``12.0`` →
@@ -284,8 +290,25 @@ def _nutrition_rows(nutrition_json: object) -> list[dict[str, str]]:
         value = _coerce_nutrition_value(macros.get(key))
         if value is None:
             continue
-        rows.append({"label": label, "value": f"{value:g}", "unit": unit})
+        rows.append({"key": key, "label": label, "value": f"{value:g}", "unit": unit})
     return rows
+
+
+def _nutrition_panel(nutrition_json: object) -> dict[str, object] | None:
+    """Split parsed macro rows into the calories lead and the macro ledger.
+
+    Returns ``{"calories": <row|None>, "macros": [rows]}`` when any macro is
+    present, else ``None`` (the template renders no panel). Owning the split
+    here, keyed on the stable field key rather than a display label, keeps the
+    template from reconstructing the lead/ledger structure by matching label
+    text: relabelling a macro can't silently move it between lead and ledger.
+    """
+    rows = _nutrition_rows(nutrition_json)
+    if not rows:
+        return None
+    calories = next((r for r in rows if r["key"] == _NUTRITION_LEAD_KEY), None)
+    macros = [r for r in rows if r["key"] != _NUTRITION_LEAD_KEY]
+    return {"calories": calories, "macros": macros}
 
 
 @router.get("/{recipe_id}")
@@ -307,7 +330,7 @@ def recipe_detail(
         "recipes/detail.html",
         {
             "recipe": recipe,
-            "nutrition": _nutrition_rows(recipe.get("nutrition_json")),
+            "nutrition": _nutrition_panel(recipe.get("nutrition_json")),
             "pantry_canonical_ids": pantry_canonical_ids,
             "current_week": current_week,
             "next_week": next_week,

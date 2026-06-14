@@ -102,14 +102,23 @@
   {% if nutrition %}
   <section class="nutrition-section">
     <h2>Nutrition <span class="nutrition-note">per serving</span></h2>
-    <ul class="nutrition-grid">
-      {% for item in nutrition %}
-      <li class="nutrition-item">
-        <span class="nutrition-value">{{ item.value }}<span class="nutrition-unit">{{ item.unit }}</span></span>
-        <span class="nutrition-label">{{ item.label }}</span>
-      </li>
+    {% if nutrition.calories %}
+    <p class="nutrition-lead">
+      <span class="nutrition-lead-value">{{ nutrition.calories.value }}</span>
+      <span class="nutrition-lead-label">{{ nutrition.calories.label }}</span>
+    </p>
+    {% endif %}
+    {% if nutrition.macros %}
+    <dl class="nutrition-macros">
+      {% for item in nutrition.macros %}
+      <div class="nutrition-macro">
+        <dt class="nutrition-macro-label">{{ item.label }}</dt>
+        <dd class="nutrition-macro-value">{{ item.value }}<span class="nutrition-unit">{{ item.unit }}</span></dd>
+      </div>
       {% endfor %}
-    </ul>
+    </dl>
+    {% endif %}
+    <p class="nutrition-source">Approximate, from the recipe source.</p>
   </section>
   {% endif %}
 
