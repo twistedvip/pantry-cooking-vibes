@@ -383,6 +383,109 @@ def test_recipe_detail_shows_delete_button(client: TestClient, seeded_db_path):
     assert "Delete recipe" in r.text
 
 
+def _set_nutrition(db_path, name: str, nutrition_json: str | None) -> int:
+    """Set a recipe's nutrition_json column and return its id (test helper)."""
+    with connect(db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name = ?", (name,)).fetchone()["id"]
+        conn.execute(
+            "UPDATE recipes SET nutrition_json = ? WHERE id = ?", (nutrition_json, rid)
+        )
+    return rid
+
+
+def test_recipe_detail_renders_nutrition(client: TestClient, seeded_db_path):
+    """A recipe with a full macro dict renders every macro with its unit."""
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": 210, "protein_g": 9, "fat_g": 7.5, '
+        '"carbs_g": 28, "fiber_g": 4, "sodium_mg": 320}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" in r.text
+    for label in ("Calories", "Protein", "Carbs", "Fat", "Fiber", "Sodium"):
+        assert label in r.text
+    assert "per serving" in r.text
+    # Whole numbers render without a trailing ".0"; fractional values are kept.
+    assert "210" in r.text and "7.5" in r.text
+    # Macro units render (sodium in mg); calories shows as a unitless lead since
+    # the "Calories" label already names the unit.
+    assert "mg" in r.text
+
+
+def test_recipe_detail_nutrition_calories_is_the_lead(client: TestClient, seeded_db_path):
+    """Calories renders as the lead figure, not as an ordinary ledger row.
+
+    Guards the route-owned lead/ledger split: the placement must not depend on
+    matching the display label in the template.
+    """
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": 210, "protein_g": 9, "sodium_mg": 320}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert '<span class="nutrition-lead-value">210</span>' in r.text
+    # Calories must not also appear as a macro ledger row.
+    assert ">Calories</dt>" not in r.text
+
+
+def test_recipe_detail_nutrition_without_calories_renders_ledger_only(
+    client: TestClient, seeded_db_path
+):
+    """Missing calories drops the lead but still renders the macro ledger."""
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": null, "protein_g": 9, "sodium_mg": 320}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" in r.text
+    assert "nutrition-lead" not in r.text
+    assert ">Protein</dt>" in r.text
+
+
+def test_recipe_detail_nutrition_omits_missing_macros(client: TestClient, seeded_db_path):
+    """Only the macros actually present render; absent/None ones are skipped."""
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": 150, "protein_g": null, "fat_g": null, '
+        '"carbs_g": null, "fiber_g": null, "sodium_mg": null}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" in r.text
+    assert "Calories" in r.text
+    assert "Protein" not in r.text
+    assert "Sodium" not in r.text
+
+
+def test_recipe_detail_no_nutrition_section_when_absent(client: TestClient, seeded_db_path):
+    """No nutrition column (the seed default) renders no panel."""
+    with connect(seeded_db_path) as conn:
+        rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" not in r.text
+
+
+def test_recipe_detail_no_nutrition_section_when_all_empty(client: TestClient, seeded_db_path):
+    """An all-null macro dict is treated as no data — no panel rendered."""
+    rid = _set_nutrition(
+        seeded_db_path,
+        "Broccoli Stir Fry",
+        '{"calories": null, "protein_g": null, "fat_g": null, '
+        '"carbs_g": null, "fiber_g": null, "sodium_mg": null}',
+    )
+    r = client.get(f"/recipes/{rid}")
+    assert r.status_code == 200
+    assert "nutrition-section" not in r.text
+
+
 def test_delete_recipe_redirects_to_list_and_removes_row(client: TestClient, seeded_db_path):
     with connect(seeded_db_path) as conn:
         rid = conn.execute("SELECT id FROM recipes WHERE name='Broccoli Stir Fry'").fetchone()["id"]

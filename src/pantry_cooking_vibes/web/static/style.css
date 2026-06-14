@@ -1070,6 +1070,89 @@ summary:focus-visible,
 }
 .step-text { flex: 1; }
 
+/* ---------- Nutrition (per-serving macro panel) ---------- */
+.nutrition-section {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  margin-top: 24px;
+}
+.nutrition-section h2 { margin-top: 0; font-size: 26px; }
+.nutrition-note {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+/* Calories lead: the one number people scan for, given primacy in size. */
+.nutrition-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+.nutrition-lead-value {
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 0.85;
+  color: var(--ink);
+}
+.nutrition-lead-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin-left: 6px;
+}
+
+/* Remaining macros as a ledger: label left, value right, hairline rules.
+   Two columns on wide screens, one on mobile; no tiles, no nesting. */
+.nutrition-macros {
+  margin: 12px 0 0;
+  padding: 0;
+  max-width: 640px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 40px;
+}
+.nutrition-macro {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.nutrition-macro-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.nutrition-macro-value {
+  margin: 0;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink);
+}
+.nutrition-unit {
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+  color: var(--ink-soft);
+}
+.nutrition-source {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 .source-link { color: var(--ink-soft); font-size: 13px; word-break: break-all; margin-top: 16px; }
 
 /* ---------- Pantry (categorized, read-first rows) ---------- */

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Per-serving nutrition panel on the recipe detail page, rendering the
+  macros already stored in `recipes.nutrition_json` (calories, protein,
+  carbs, fat, fiber, sodium). Macros with no value are omitted, and
+  recipes without nutrition data show no panel (issue #48).
+
 ## [0.1.0] — 2026-05-15
 
 First tagged release. Establishes a clean baseline schema and a published
