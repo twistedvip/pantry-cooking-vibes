@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% set active_nav = 'recipes' %}
+{% block title %}Import a recipe{% endblock %}
+{% block content %}
+<p class="breadcrumbs"><a href="/recipes">← Recipes</a></p>
+
+<h1 class="detail-title">Import a recipe</h1>
+<p class="screen-sub">Paste a link to a recipe page and we'll pull in the ingredients, steps, timing, and photo.</p>
+
+{% if error %}
+<p class="form-error" role="alert">{{ error }}</p>
+{% endif %}
+
+<form class="import-form" method="post" action="/recipes/import">
+  <label>
+    Recipe URL
+    <input type="text" name="url" value="{{ url }}" inputmode="url" autofocus
+           required maxlength="2000"
+           placeholder="https://www.example.com/best-roast-chicken">
+    <span class="field-hint">A direct link to one recipe. Works on sites that publish schema.org recipe data — most major cooking sites do.</span>
+  </label>
+  <div class="btn-row">
+    <button type="submit" class="btn primary">Import recipe</button>
+    <a class="btn ghost" href="/recipes">Cancel</a>
+  </div>
+</form>
+
+<aside class="import-note box pad soft">
+  <p>Importing reads the page's structured recipe data — it doesn't copy the whole article. A page that can't be imported usually just doesn't publish that data.</p>
+  <p class="hint">Bringing in a scraped batch? That still runs through the CLI: <code>uv run meal-cli ingest &lt;file.jsonl&gt;</code>.</p>
+</aside>
+{% endblock %}

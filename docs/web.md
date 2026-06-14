@@ -1,10 +1,11 @@
 # Web UI (FastAPI)
 
-Read-mostly browse UI served by `uvicorn`. Only the pantry routes write to
-the DB; everything else (recipes, plans, shopping) is read-only from the
-user's perspective. Favorites are the one exception — they write to
-`recipe_favorites` but still live under the otherwise-read-only recipes
-surface.
+Read-mostly browse UI served by `uvicorn`. The pantry routes write to the DB;
+plans and shopping are read-only from the user's perspective. The recipes
+surface is mostly read-only but carries a few write paths: favorites
+(`recipe_favorites`), editing/deleting a recipe, and importing a recipe from a
+URL (`/recipes/import`, issue #12), which delegates to the same
+`importers.url_import.import_url` the CLI uses.
 
 ## Routes
 
@@ -13,6 +14,8 @@ surface.
 | GET    | `/`                            | `routes/home.py::home`               | no            |
 | GET    | `/static/*`                    | `StaticFiles`                        | no            |
 | GET    | `/recipes`                     | `recipes.py::list_recipes`           | no            |
+| GET    | `/recipes/import`              | `recipes.py::import_recipe_form`     | no            |
+| POST   | `/recipes/import`              | `recipes.py::import_recipe_submit`   | `recipes` (+ ingredient queue) |
 | GET    | `/recipes/{id}`                | `recipes.py::recipe_detail`          | no            |
 | POST   | `/recipes/{id}/favorite`       | `recipes.py::toggle_favorite`        | `recipe_favorites` |
 | GET    | `/pantry`                      | `pantry.py::pantry_page`             | no            |

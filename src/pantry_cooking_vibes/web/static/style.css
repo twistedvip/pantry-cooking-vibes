@@ -1858,3 +1858,40 @@ pre.instructions {
   }
   .recipe-edit-form .btn-row { grid-column: 1 / -1; }
 }
+
+/* ---- URL import ---- */
+/* List header carries its title and the import CTA on one line, wrapping the
+   button under the title on narrow screens. */
+.screen-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.screen-head h1 { margin-bottom: 4px; }
+.screen-head .screen-sub { margin-bottom: 0; }
+.import-cta { white-space: nowrap; flex-shrink: 0; }
+
+.import-form { max-width: 640px; }
+.import-form > label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.import-form input[type="text"] {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+.import-form .field-hint {
+  display: block;
+  font-weight: 400;
+  font-size: .8rem;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+.import-form .btn-row { display: flex; gap: 10px; align-items: center; }
+.import-note { max-width: 640px; margin-top: 22px; }
+.import-note p { margin: 0 0 8px; }
+.import-note p:last-child { margin-bottom: 0; }
