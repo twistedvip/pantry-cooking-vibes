@@ -152,6 +152,41 @@ def test_discard_selected(client: TestClient, db_path):
     assert got is not None and got["status"] == "discarded"
 
 
+def test_failed_item_is_selectable(client: TestClient, db_path):
+    """A failed row must render a checkbox so it can be discarded (regression)."""
+    batch_id = _seed_batch(db_path)
+    failed = inbox.list_items(batch_id, status="failed", db_path=db_path)["items"][0]
+    r = client.get(f"/imports/{batch_id}?status=failed")
+    assert f'name="item_ids" value="{failed["id"]}"' in r.text
+    assert "Discard 1 failed" in r.text
+
+
+def test_discard_all_failed_via_route(client: TestClient, db_path):
+    batch_id = _seed_batch(db_path)
+    r = client.post(
+        f"/imports/{batch_id}/save",
+        data={"action": "discard-all", "status": "failed"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert inbox.status_counts(batch_id, db_path=db_path)["failed"] == 0
+
+
+def test_batch_is_deleted_when_fully_resolved(client: TestClient, db_path):
+    """An import leaves no record: once every item is resolved, the batch is
+    gone and the user lands back on the start form."""
+    text = json.dumps([_recipe("Only One", "https://e.com/only")])
+    batch_id = inbox_ingest.build_batch(file_text=text, db_path=db_path)
+    r = client.post(
+        f"/imports/{batch_id}/save",
+        data={"action": "save-all", "status": "all"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/imports/new")
+    assert inbox.get_batch(batch_id, db_path=db_path) is None
+
+
 # ---------- fix an item ----------
 
 

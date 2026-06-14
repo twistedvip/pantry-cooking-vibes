@@ -374,6 +374,19 @@ def save_items(
     return {"saved": saved, "replaced": replaced, "skipped": skipped, "recipe_ids": recipe_ids}
 
 
+def _matching_ids(conn: sqlite3.Connection, batch_id: int, status: str, query: str) -> list[int]:
+    """Item ids in a batch matching a filter pill + search (the set a bulk
+    action operates on, so it acts on exactly what the filter shows)."""
+    where, params = _status_filter_sql(status)
+    sql = f"SELECT id FROM import_items WHERE batch_id = ? AND {where}"  # noqa: S608
+    args: list[Any] = [batch_id, *params]
+    q = query.strip()
+    if q:
+        sql += " AND name LIKE ? COLLATE NOCASE"
+        args.append(f"%{q}%")
+    return [r["id"] for r in conn.execute(sql, args).fetchall()]
+
+
 def save_all(
     batch_id: int,
     *,
@@ -383,20 +396,33 @@ def save_all(
 ) -> dict:
     """Save every item in a batch matching a filter (the bulk 'save all ready').
 
-    Operates on the same set the filter shows, so 'save all ready' acts on
-    exactly the ready rows. Dups are never bulk-saved (they need a per-row
-    replace), so a status='dup' or 'all' bulk save skips them.
+    Dups are never bulk-saved (they need a per-row replace), so a status='dup'
+    or 'all' bulk save skips them.
     """
-    where, params = _status_filter_sql(status)
-    sql = f"SELECT id FROM import_items WHERE batch_id = ? AND {where}"  # noqa: S608
-    args: list[Any] = [batch_id, *params]
-    q = query.strip()
-    if q:
-        sql += " AND name LIKE ? COLLATE NOCASE"
-        args.append(f"%{q}%")
     with connect(db_path or DB_PATH) as conn:
-        ids = [r["id"] for r in conn.execute(sql, args).fetchall()]
+        ids = _matching_ids(conn, batch_id, status, query)
     return save_items(ids, db_path=db_path)
+
+
+def discard_all(
+    batch_id: int,
+    *,
+    status: str = "failed",
+    query: str = "",
+    db_path: Path | None = None,
+) -> int:
+    """Discard every item matching a filter (the bulk 'discard all failed').
+    Returns the number discarded."""
+    with connect(db_path or DB_PATH) as conn:
+        ids = _matching_ids(conn, batch_id, status, query)
+    return discard_items(ids, db_path=db_path)
+
+
+def delete_batch(batch_id: int, *, db_path: Path | None = None) -> None:
+    """Remove a batch and its items entirely. Called when every item has been
+    resolved, so a finished import leaves no browsable record."""
+    with connect(db_path or DB_PATH) as conn:
+        conn.execute("DELETE FROM import_batches WHERE id = ?", (batch_id,))
 
 
 def discard_items(item_ids: list[int], *, db_path: Path | None = None) -> int:

@@ -40,16 +40,25 @@
   <input type="hidden" name="status" value="{{ status }}">
   <input type="hidden" name="q" value="{{ q }}">
 
+  {% set saveable = counts.ready + counts.review %}
   <div class="ib-bulkbar">
-    <span class="ib-selinfo">Selected rows</span>
-    <span class="ib-sub">tick rows to act on them, or save the whole filter</span>
+    <span class="ib-selinfo">Triage</span>
+    <span class="ib-sub">tick rows to act on them, or use the whole-filter action</span>
     <span class="ib-spacer"></span>
     <button type="submit" name="action" value="discard" class="btn danger">Discard selected</button>
     <button type="submit" name="action" value="save" class="btn">Save selected</button>
-    {% if counts[status] and status != 'failed' %}
-    <button type="submit" name="action" value="save-all" class="btn primary">
-      Save {{ counts[status] }} {{ 'matching' if status == 'all' else status }} &rarr;
-    </button>
+    {# One contextual whole-filter action: discard for the can't-save buckets,
+       save for the rest. #}
+    {% if status == 'failed' and counts.failed %}
+    <button type="submit" name="action" value="discard-all" class="btn danger">Discard {{ counts.failed }} failed</button>
+    {% elif status == 'dup' and counts.dup %}
+    <button type="submit" name="action" value="discard-all" class="btn danger">Discard {{ counts.dup }} duplicate{{ 's' if counts.dup != 1 else '' }}</button>
+    {% elif status == 'ready' and counts.ready %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ counts.ready }} ready &rarr;</button>
+    {% elif status == 'review' and counts.review %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ counts.review }} for review &rarr;</button>
+    {% elif status == 'all' and saveable %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ saveable }} ready &amp; reviewed &rarr;</button>
     {% endif %}
   </div>
 
@@ -70,13 +79,14 @@
       <tbody>
         {% for it in items %}
         {% set terminal = it.status in ('saved', 'discarded') %}
-        {% set saveable = it.status in ('ready', 'review', 'dup') %}
         <tr class="{% if terminal %}ib-dis{% endif %}">
           <td class="c">
-            {% if saveable %}
+            {# Every open item is selectable: ticking drives both Save (skips
+               failed) and Discard, so a failed item can still be discarded. #}
+            {% if not terminal %}
             <input type="checkbox" name="item_ids" value="{{ it.id }}" aria-label="Select {{ it.name or 'untitled item' }}">
             {% else %}
-            <span class="ib-cb-off" title="nothing to save"></span>
+            <span class="ib-cb-off"></span>
             {% endif %}
           </td>
           <td>

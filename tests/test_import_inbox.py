@@ -272,6 +272,29 @@ def test_discard_leaves_saved_items_alone(db_path):
     assert still_saved is not None and still_saved["status"] == "saved"
 
 
+def test_discard_all_failed(db_path):
+    b = inbox.create_batch("b", db_path=db_path)
+    inbox.add_item(b, _ready_item("ok", "u1"), db_path=db_path)
+    inbox.add_item(
+        b, _ready_item("bad", "u2", status="failed", failure_reason="no image"), db_path=db_path
+    )
+    assert inbox.discard_all(b, status="failed", db_path=db_path) == 1
+    counts = inbox.status_counts(b, db_path=db_path)
+    assert counts["failed"] == 0 and counts["ready"] == 1
+
+
+def test_delete_batch_removes_items(db_path):
+    b = inbox.create_batch("b", db_path=db_path)
+    inbox.add_item(b, _ready_item("a", "u1"), db_path=db_path)
+    inbox.delete_batch(b, db_path=db_path)
+    assert inbox.get_batch(b, db_path=db_path) is None
+    with connect(db_path) as conn:
+        left = conn.execute(
+            "SELECT COUNT(*) FROM import_items WHERE batch_id = ?", (b,)
+        ).fetchone()[0]
+    assert left == 0
+
+
 # ---------- editing (fix drawer) ----------
 
 

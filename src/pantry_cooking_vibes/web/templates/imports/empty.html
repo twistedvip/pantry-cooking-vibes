@@ -5,6 +5,7 @@
 <h1 class="detail-title">Import recipes</h1>
 <p class="screen-sub">Paste recipe links or drop in a JSON-LD file. We'll parse them into an inbox where you can review what came through before any of it joins your library.</p>
 
+{% if notice %}<div class="flash ok">{{ notice }}</div>{% endif %}
 {% if error %}
 <p class="form-error" role="alert">{{ error }}</p>
 {% endif %}

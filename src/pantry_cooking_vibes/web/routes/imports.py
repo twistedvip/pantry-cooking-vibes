@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
@@ -61,9 +61,10 @@ def imports_home(request: Request, db_path: Path = Depends(get_db_path)) -> obje
 
 
 @router.get("/new")
-def new_batch_form(request: Request) -> object:
-    """The start-a-batch form, reachable even when a recent batch exists."""
-    return render(request, "imports/empty.html", {"error": None})
+def new_batch_form(request: Request, done: str = Query("")) -> object:
+    """The start-a-batch form, reachable even when a recent batch exists.
+    ``done`` carries a one-line summary after a batch finishes and is cleared."""
+    return render(request, "imports/empty.html", {"error": None, "notice": done})
 
 
 @router.post("")
@@ -152,6 +153,7 @@ def batch_inbox(
             "counts": counts,
             "filters": _FILTERS,
             "status": status_val,
+            "status_label": dict(_FILTERS).get(status_val, status_val),
             "q": q,
             "total": total,
             "page": page_val,
@@ -186,25 +188,44 @@ def save_or_discard(
     replace_ids: list[int] = Form(default_factory=list),
     db_path: Path = Depends(get_db_path),
 ) -> object:
-    """Apply a bulk action to the batch. ``action`` is one of:
-    ``save`` (the checked items, honoring per-row replace), ``discard`` (the
-    checked items), or ``save-all`` (every item matching the current filter)."""
+    """Apply a bulk action to the batch, then return to the inbox. ``action``:
+    ``save`` / ``discard`` act on the checked rows (save honors per-row
+    replace); ``save-all`` / ``discard-all`` act on every item matching the
+    current filter. Once every item is resolved the batch is deleted, so a
+    finished import leaves no record."""
     if inbox.get_batch(batch_id, db_path=db_path) is None:
         raise HTTPException(status_code=404, detail=f"Import batch {batch_id} not found")
     status_val = status if status in _FILTER_VALUES else "all"
 
     if action == "save-all":
-        result = inbox.save_all(batch_id, status=status_val, query=q, db_path=db_path)
-        flash = f"Saved {result['saved'] + result['replaced']} recipes."
+        flash = _saved_flash(inbox.save_all(batch_id, status=status_val, query=q, db_path=db_path))
+    elif action == "discard-all":
+        n = inbox.discard_all(batch_id, status=status_val, query=q, db_path=db_path)
+        flash = f"Discarded {n} item{'' if n == 1 else 's'}."
     elif action == "discard":
         n = inbox.discard_items(item_ids, db_path=db_path)
         flash = f"Discarded {n} item{'' if n == 1 else 's'}."
     else:
-        result = inbox.save_items(item_ids, replace_ids=set(replace_ids), db_path=db_path)
-        total_saved = result["saved"] + result["replaced"]
-        flash = f"Saved {total_saved} recipe{'' if total_saved == 1 else 's'}."
+        flash = _saved_flash(
+            inbox.save_items(item_ids, replace_ids=set(replace_ids), db_path=db_path)
+        )
 
+    # An import is transient: once nothing is left to triage, drop the batch so
+    # there's no "import 1, 2, 3" history to return to.
+    if inbox.status_counts(batch_id, db_path=db_path)["all"] == 0:
+        inbox.delete_batch(batch_id, db_path=db_path)
+        notice = quote(flash + " Inbox cleared.", safe="")
+        return RedirectResponse(url=f"/imports/new?done={notice}", status_code=303)
     return _redirect_to_batch(batch_id, status_val, q, saved=flash)
+
+
+def _saved_flash(result: dict) -> str:
+    """Save-result -> reading copy, naming skips so a no-op save isn't a mystery."""
+    total = result["saved"] + result["replaced"]
+    msg = f"Saved {total} recipe{'' if total == 1 else 's'}."
+    if result["skipped"]:
+        msg += f" Skipped {result['skipped']} (duplicates need 'replace'; failed can't be saved)."
+    return msg
 
 
 # ---------------------------------------------------------------------------
