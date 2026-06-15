@@ -176,16 +176,26 @@ def latest_batch_id(*, db_path: Path | None = None) -> int | None:
 MAX_PAGE_LIMIT = 250
 
 
-def _status_filter_sql(status: str) -> tuple[str, list[Any]]:
-    """Translate a filter pill value into a WHERE fragment + params.
+def _apply_item_filters(where: list[str], params: list[Any], *, status: str, query: str) -> None:
+    """Append the status + search filters to a batch-item query.
 
-    'all' means the unresolved union; a specific status filters to it; anything
-    else (including saved/discarded) filters to that exact status.
+    Only **literal** SQL fragments are appended to ``where``; the user-supplied
+    ``status`` and search term reach ``params`` (bound via ``?``) and never the
+    SQL text. Keeping user values out of the query string is what makes the
+    interpolation injection-safe — and keeps CodeQL's taint off the query.
+
+    'all' (or empty) means the unresolved union; any other status filters to it.
     """
     if status == "all" or not status:
-        placeholders = ",".join("?" for _ in UNRESOLVED_STATUSES)
-        return f"status IN ({placeholders})", list(UNRESOLVED_STATUSES)
-    return "status = ?", [status]
+        where.append("status IN (" + ",".join("?" * len(UNRESOLVED_STATUSES)) + ")")
+        params.extend(UNRESOLVED_STATUSES)
+    else:
+        where.append("status = ?")
+        params.append(status)
+    q = query.strip()
+    if q:
+        where.append("name LIKE ? COLLATE NOCASE")
+        params.append(f"%{q}%")
 
 
 def list_items(
@@ -204,19 +214,15 @@ def list_items(
     empty list.
     """
     limit = max(1, min(int(limit), MAX_PAGE_LIMIT))
-    where, params = _status_filter_sql(status)
-    sql_where = f"batch_id = ? AND {where}"
-    args: list[Any] = [batch_id, *params]
-    q = query.strip()
-    if q:
-        sql_where += " AND name LIKE ? COLLATE NOCASE"
-        args.append(f"%{q}%")
+    where: list[str] = ["batch_id = ?"]
+    args: list[Any] = [batch_id]
+    _apply_item_filters(where, args, status=status, query=query)
+    # where_sql is a join of literal fragments only; all user values are in args.
+    where_sql = " AND ".join(where)
 
     with connect(db_path or DB_PATH) as conn:
-        # S608: sql_where interpolates only trusted fragments (a fixed status set
-        # and a LIKE placeholder); every value is bound via ? placeholders.
         total = conn.execute(
-            f"SELECT COUNT(*) FROM import_items WHERE {sql_where}",  # noqa: S608
+            f"SELECT COUNT(*) FROM import_items WHERE {where_sql}",  # noqa: S608
             args,
         ).fetchone()[0]
         # Clamp a past-the-end offset to the final page (limit-aligned).
@@ -224,7 +230,7 @@ def list_items(
             offset = ((total - 1) // limit) * limit
         offset = max(0, offset)
         rows = conn.execute(
-            f"SELECT * FROM import_items WHERE {sql_where} "  # noqa: S608
+            f"SELECT * FROM import_items WHERE {where_sql} "  # noqa: S608
             "ORDER BY name IS NULL, name COLLATE NOCASE, id "
             "LIMIT ? OFFSET ?",
             [*args, limit, offset],
@@ -388,14 +394,17 @@ def save_items(
 def _matching_ids(conn: sqlite3.Connection, batch_id: int, status: str, query: str) -> list[int]:
     """Item ids in a batch matching a filter pill + search (the set a bulk
     action operates on, so it acts on exactly what the filter shows)."""
-    where, params = _status_filter_sql(status)
-    sql = f"SELECT id FROM import_items WHERE batch_id = ? AND {where}"  # noqa: S608
-    args: list[Any] = [batch_id, *params]
-    q = query.strip()
-    if q:
-        sql += " AND name LIKE ? COLLATE NOCASE"
-        args.append(f"%{q}%")
-    return [r["id"] for r in conn.execute(sql, args).fetchall()]
+    where: list[str] = ["batch_id = ?"]
+    args: list[Any] = [batch_id]
+    _apply_item_filters(where, args, status=status, query=query)
+    where_sql = " AND ".join(where)  # literal fragments only; user values in args
+    return [
+        r["id"]
+        for r in conn.execute(
+            f"SELECT id FROM import_items WHERE {where_sql}",  # noqa: S608
+            args,
+        ).fetchall()
+    ]
 
 
 def save_all(
