@@ -8,11 +8,14 @@ from pathlib import Path
 import pytest
 
 from pantry_cooking_vibes.db import connect
+from pantry_cooking_vibes.importers import url_import
 from pantry_cooking_vibes.importers.url_import import (
     RecipeMissingImageError,
     RecipeNotFoundError,
     UnsafeURLError,
+    _accept_encoding,
     _assert_safe_fetch_url,
+    _build_session,
     _collect_tags,
     _image_url,
     _instructions,
@@ -27,6 +30,31 @@ from pantry_cooking_vibes.importers.url_import import (
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "url_import"
 SERIOUS_EATS_URL = "https://www.seriouseats.com/pasta-al-tonno-5135115"
+
+
+# ---------- Accept-Encoding (issue #66) ----------
+
+
+def test_accept_encoding_omits_brotli_when_decoder_absent(monkeypatch):
+    """Without a brotli decoder, 'br' must not be advertised, or br-serving
+    sites (Budget Bytes etc.) return undecodable bytes and every parse fails."""
+    monkeypatch.setattr(url_import.importlib.util, "find_spec", lambda name: None)
+    assert _accept_encoding() == "gzip, deflate"
+    assert "br" not in _accept_encoding()
+
+
+def test_accept_encoding_includes_brotli_when_decoder_present(monkeypatch):
+    monkeypatch.setattr(
+        url_import.importlib.util, "find_spec", lambda name: object() if name == "brotli" else None
+    )
+    assert "br" in _accept_encoding()
+
+
+def test_session_advertises_only_decodable_encodings(monkeypatch):
+    monkeypatch.setattr(url_import.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(url_import, "ACCEPT_ENCODING", _accept_encoding())
+    session = _build_session()
+    assert "br" not in session.headers["Accept-Encoding"]
 
 
 # ---------- ISO 8601 duration ----------
