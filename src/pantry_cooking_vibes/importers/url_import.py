@@ -7,6 +7,7 @@ captured pages).
 
 from __future__ import annotations
 
+import importlib.util
 import ipaddress
 import json
 import logging
@@ -45,6 +46,22 @@ _DEFAULT_UA = (
 USER_AGENT = os.environ.get("PANTRY_COOKING_VIBES_UA", _DEFAULT_UA)
 REQUEST_TIMEOUT = 20
 
+
+def _accept_encoding() -> str:
+    """Encodings we can actually decode. Only advertise brotli when a brotli
+    decoder is importable: otherwise a ``br``-serving site (most Cloudflare-
+    fronted recipe sites, e.g. Budget Bytes) hands back raw brotli bytes that
+    requests can't decompress, leaving ``response.text`` as binary garbage and
+    every parse silently failing (issue #66). gzip/deflate are always decoded."""
+    has_brotli = (
+        importlib.util.find_spec("brotli") is not None
+        or importlib.util.find_spec("brotlicffi") is not None
+    )
+    return "gzip, deflate, br" if has_brotli else "gzip, deflate"
+
+
+ACCEPT_ENCODING = _accept_encoding()
+
 _JSONLD_RE = re.compile(
     r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE,
@@ -77,7 +94,7 @@ def _build_session() -> requests.Session:
             "User-Agent": USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": ACCEPT_ENCODING,
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
             "Sec-Fetch-Dest": "document",
