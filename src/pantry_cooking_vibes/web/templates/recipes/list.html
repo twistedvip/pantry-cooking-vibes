@@ -2,8 +2,13 @@
 {% set active_nav = 'recipes' %}
 {% block title %}Recipes{% endblock %}
 {% block content %}
-<h1>Recipes</h1>
-<p class="screen-sub">Filter the catalog — narrow by name, cook time, or tag.</p>
+<div class="screen-head">
+  <div>
+    <h1>Recipes</h1>
+    <p class="screen-sub">Filter the catalog — narrow by name, cook time, or tag.</p>
+  </div>
+  <a class="btn primary import-cta" href="/imports">+ Import recipes</a>
+</div>
 
 <div class="browser-layout">
   <form class="filter-rail" method="get" action="/recipes">

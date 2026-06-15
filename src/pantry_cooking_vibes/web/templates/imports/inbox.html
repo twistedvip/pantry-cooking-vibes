@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set active_nav = 'imports' %}
+{% block title %}Import inbox{% endblock %}
+{% block content %}
+<div class="ib-head">
+  <div>
+    <h1 class="detail-title">Import inbox</h1>
+    <p class="ib-provenance">
+      {%- if batch.label %}{{ batch.label }} &middot; {% endif -%}
+      {%- if batch.status == 'parsing' %}parsing {{ batch.parsed }} of {{ batch.total }}&hellip;
+      {%- else %}{{ batch.parsed }} parsed{% endif -%}
+    </p>
+  </div>
+  <a class="pill-dashed" href="/imports/new">+ new import</a>
+</div>
+
+{% if saved_flash %}<div class="flash ok">{{ saved_flash }}</div>{% endif %}
+
+{# ---- filter bar: counts live on the pills (no stat tiles) ---- #}
+<div class="ib-filterbar">
+  <form class="ib-search" method="get" action="/imports/{{ batch.id }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="filter by title&hellip;"
+           aria-label="Filter items by title">
+  </form>
+  <div class="ib-pills">
+    {% for value, label in filters %}
+    <a class="ib-pill {% if value == status %}on{% endif %}"
+       href="/imports/{{ batch.id }}?status={{ value }}{% if q %}&q={{ q | urlencode }}{% endif %}">
+      {{ label }}<span class="ct">{{ counts[value] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if items %}
+{# One form wraps the table + bulk bar so the checkboxes drive both Save and
+   Discard. 'Save all' is a separate form below that acts on the whole filter. #}
+<form method="post" action="/imports/{{ batch.id }}/save">
+  <input type="hidden" name="status" value="{{ status }}">
+  <input type="hidden" name="q" value="{{ q }}">
+
+  {% set saveable = counts.ready + counts.review %}
+  <div class="ib-bulkbar">
+    <span class="ib-selinfo">Triage</span>
+    <span class="ib-sub">tick rows to act on them, or use the whole-filter action</span>
+    <span class="ib-spacer"></span>
+    <button type="submit" name="action" value="discard" class="btn danger">Discard selected</button>
+    <button type="submit" name="action" value="save" class="btn">Save selected</button>
+    {# One contextual whole-filter action: discard for the can't-save buckets,
+       save for the rest. #}
+    {% if status == 'failed' and counts.failed %}
+    <button type="submit" name="action" value="discard-all" class="btn danger">Discard {{ counts.failed }} failed</button>
+    {% elif status == 'dup' and counts.dup %}
+    <button type="submit" name="action" value="discard-all" class="btn danger">Discard {{ counts.dup }} duplicate{{ 's' if counts.dup != 1 else '' }}</button>
+    {% elif status == 'ready' and counts.ready %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ counts.ready }} ready &rarr;</button>
+    {% elif status == 'review' and counts.review %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ counts.review }} for review &rarr;</button>
+    {% elif status == 'all' and saveable %}
+    <button type="submit" name="action" value="save-all" class="btn primary">Save {{ saveable }} ready &amp; reviewed &rarr;</button>
+    {% endif %}
+  </div>
+
+  <div class="ib-panel">
+    <table class="ib-table">
+      <thead>
+        <tr>
+          <th class="c" aria-label="Select"></th>
+          <th></th>
+          <th>Title</th>
+          <th class="c">Tags</th>
+          <th class="c">Time</th>
+          <th class="c">Ings</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        {% set terminal = it.status in ('saved', 'discarded') %}
+        <tr class="{% if terminal %}ib-dis{% endif %}">
+          <td class="c">
+            {# Every open item is selectable: ticking drives both Save (skips
+               failed) and Discard, so a failed item can still be discarded. #}
+            {% if not terminal %}
+            <input type="checkbox" name="item_ids" value="{{ it.id }}" aria-label="Select {{ it.name or 'untitled item' }}">
+            {% else %}
+            <span class="ib-cb-off"></span>
+            {% endif %}
+          </td>
+          <td>
+            {% if it.image_url %}
+            <img class="ib-thumb" src="{{ it.image_url }}" alt="" loading="lazy">
+            {% else %}
+            <span class="ib-thumb placeholder">🍽</span>
+            {% endif %}
+          </td>
+          <td class="ib-title">{{ it.name or '— no title parsed —' }}</td>
+          <td class="c">{% if it.tag_count %}<span class="ib-count">{{ it.tag_count }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="c">{% if it.cooking_time_min is not none %}{{ it.cooking_time_min }}m{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="c">{{ it.ingredient_count or '—' }}</td>
+          <td>
+            <span class="ib-status {{ it.status }}"
+                  {% if it.failure_reason %}title="{{ it.failure_reason }}"{% elif it.review_reason %}title="{{ it.review_reason }}"{% endif %}>
+              {%- if it.status == 'review' %}needs review
+              {%- elif it.status == 'dup' %}duplicate
+              {%- elif it.status == 'failed' %}failed{% if it.failure_reason %}: {{ it.failure_reason }}{% endif %}
+              {%- else %}{{ it.status }}{% endif -%}
+            </span>
+            {% if it.status == 'dup' %}
+            <label class="ib-replace" title="Overwrite the existing recipe">
+              <input type="checkbox" name="replace_ids" value="{{ it.id }}"> replace
+            </label>
+            {% endif %}
+          </td>
+          <td>
+            {% if it.status != 'discarded' %}
+            <a class="ib-open" href="/imports/items/{{ it.id }}/edit">open →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+
+<div class="ib-resultline">
+  showing {{ '{:,}'.format(page_start) }}&ndash;{{ '{:,}'.format(page_end) }} of {{ '{:,}'.format(total) }} {{ 'item' if total == 1 else 'items' }}
+</div>
+
+{% if total_pages > 1 %}
+<nav class="ib-pager" aria-label="Import inbox pages">
+  {% if page > 1 %}
+  <a class="pg" href="?{{ request.url.include_query_params(page=page - 1).query }}">← Prev</a>
+  {% endif %}
+  {% for p in page_window %}
+    {% if p is none %}<span class="gap" aria-hidden="true">…</span>
+    {% elif p == page %}<span class="pg cur" aria-current="page">{{ p }}</span>
+    {% else %}<a class="pg" href="?{{ request.url.include_query_params(page=p).query }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+  {% if page < total_pages %}
+  <a class="pg" href="?{{ request.url.include_query_params(page=page + 1).query }}">Next →</a>
+  {% endif %}
+</nav>
+{% endif %}
+
+<p class="ib-safenote">Saving is non-destructive: duplicates are skipped unless you tick “replace” on the row.</p>
+
+{% else %}
+<div class="empty">
+  <p>{% if q %}No items match “{{ q }}”.{% else %}Nothing in this view.{% endif %}</p>
+  <p class="hint">
+    {% if counts.all %}Try a different filter above.{% else %}Every item in this batch is saved or discarded.{% endif %}
+  </p>
+  <p><a href="/imports/new">Start another import</a></p>
+</div>
+{% endif %}
+{% endblock %}

@@ -213,3 +213,63 @@ CREATE TABLE IF NOT EXISTS meal_plan_favorites (
     plan_id    INTEGER PRIMARY KEY REFERENCES meal_plans(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ---------------------------------------------------------------------------
+-- import_batches  (staging inbox: a batch of parsed-but-not-yet-saved recipes)
+-- ---------------------------------------------------------------------------
+-- A batch is one ingestion run (pasted URLs and/or an uploaded JSON-LD file).
+-- Its items are parsed into import_items and triaged before any of them touch
+-- the recipes library. 'parsing' while the background job runs, 'ready' once
+-- every item is resolved, 'archived' once the user is done with it.
+CREATE TABLE IF NOT EXISTS import_batches (
+    id          INTEGER PRIMARY KEY,
+    label       TEXT,                                       -- 'recipes-2024.jsonld + 12 URLs'
+    status      TEXT    NOT NULL DEFAULT 'parsing'
+                CHECK (status IN ('parsing','ready','archived')),
+    total       INTEGER NOT NULL DEFAULT 0 CHECK (total >= 0),  -- expected item count (progress)
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batches_status
+    ON import_batches (status);
+
+-- ---------------------------------------------------------------------------
+-- import_items  (one parsed recipe awaiting a save/discard decision)
+-- ---------------------------------------------------------------------------
+-- Staged recipes CANNOT live in `recipes`: a duplicate shares (source,
+-- source_id) with its library twin and would collide with recipes' UNIQUE
+-- constraint. So they wait here; 'save' promotes a copy into recipes (UPSERT)
+-- and flips the item to 'saved'. The parsed payload mirrors a recipes row plus
+-- staged ingredients/tags as JSON arrays (promoted through the same normalizer
+-- import_url uses).
+CREATE TABLE IF NOT EXISTS import_items (
+    id               INTEGER PRIMARY KEY,
+    batch_id         INTEGER NOT NULL REFERENCES import_batches (id) ON DELETE CASCADE,
+    status           TEXT    NOT NULL DEFAULT 'ready'
+                     CHECK (status IN ('ready','review','dup','failed','saved','discarded')),
+    source           TEXT    NOT NULL,        -- 'url' or a file plugin source
+    source_id        TEXT,                    -- original URL / source id (dup key vs recipes)
+    name             TEXT,
+    cooking_time_min INTEGER CHECK (cooking_time_min IS NULL OR cooking_time_min >= 0),
+    servings         INTEGER CHECK (servings IS NULL OR servings >= 1),
+    instructions_md  TEXT,
+    nutrition_json   TEXT    CHECK (nutrition_json IS NULL OR json_valid(nutrition_json)),
+    image_url        TEXT,
+    rating           REAL    CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5)),
+    rating_count     INTEGER CHECK (rating_count IS NULL OR rating_count >= 0),
+    ingredients_json TEXT    NOT NULL DEFAULT '[]'
+                     CHECK (json_valid(ingredients_json)),  -- JSON array of raw strings
+    tags_json        TEXT    NOT NULL DEFAULT '[]'
+                     CHECK (json_valid(tags_json)),         -- JSON array of tag strings
+    dup_of_recipe_id INTEGER REFERENCES recipes (id) ON DELETE SET NULL,  -- set when status='dup'
+    review_reason    TEXT,                    -- why it needs review, e.g. '3 ingredients unmapped'
+    failure_reason   TEXT,                    -- why it failed, e.g. 'no recipe data' / 'no image'
+    saved_recipe_id  INTEGER REFERENCES recipes (id) ON DELETE SET NULL,  -- set when promoted
+    created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_items_batch_id
+    ON import_items (batch_id);
+
+CREATE INDEX IF NOT EXISTS idx_import_items_batch_status
+    ON import_items (batch_id, status);

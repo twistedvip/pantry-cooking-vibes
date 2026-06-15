@@ -229,6 +229,20 @@ def list_recipes(
     )
 
 
+# ---------------------------------------------------------------------------
+# Legacy single-URL import. Superseded by the import inbox (/imports), which
+# funnels every import — a single pasted URL included — through staging so it
+# gets the same dup/review triage. Kept as a redirect so old links and bookmarks
+# still land somewhere useful. Registered above /{recipe_id} so the literal
+# "import" segment is never swallowed by the int path param.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/import")
+def import_recipe_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/imports/new", status_code=307)
+
+
 # Display order, label, and unit for the compact macro dict stored in
 # recipes.nutrition_json ({calories, protein_g, fat_g, carbs_g, fiber_g,
 # sodium_mg}). Order is the one nutrition labels conventionally read in.

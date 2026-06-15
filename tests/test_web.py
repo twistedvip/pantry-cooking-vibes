@@ -387,9 +387,7 @@ def _set_nutrition(db_path, name: str, nutrition_json: str | None) -> int:
     """Set a recipe's nutrition_json column and return its id (test helper)."""
     with connect(db_path) as conn:
         rid = conn.execute("SELECT id FROM recipes WHERE name = ?", (name,)).fetchone()["id"]
-        conn.execute(
-            "UPDATE recipes SET nutrition_json = ? WHERE id = ?", (nutrition_json, rid)
-        )
+        conn.execute("UPDATE recipes SET nutrition_json = ? WHERE id = ?", (nutrition_json, rid))
     return rid
 
 
@@ -1831,3 +1829,27 @@ def test_recipe_edit_xss_payloads_are_escaped_everywhere(client: TestClient, see
         assert "<script>alert(1)</script>" not in page
         assert "<img src=x onerror" not in page
         assert "&lt;script&gt;" in page  # escaped, not dropped
+
+
+# ---------- import entry points (funnel through /imports, issue #12) ----------
+# Every import now goes through the inbox at /imports; the standalone single-URL
+# page was retired. Its behavior lives in tests/test_imports_web.py.
+
+
+def test_legacy_import_path_redirects_to_inbox(client: TestClient):
+    r = client.get("/recipes/import", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers["location"] == "/imports/new"
+
+
+def test_recipes_list_links_to_inbox(client: TestClient):
+    r = client.get("/recipes")
+    assert r.status_code == 200
+    assert 'href="/imports"' in r.text
+
+
+def test_home_links_to_inbox(client: TestClient):
+    """The populated home surfaces the import inbox, not just the recipe list."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'href="/imports"' in r.text

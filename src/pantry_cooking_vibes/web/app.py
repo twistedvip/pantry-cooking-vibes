@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from pantry_cooking_vibes.web.deps import STATIC_DIR, get_db_path
-from pantry_cooking_vibes.web.routes import home, mappings, pantry, plans, recipes
+from pantry_cooking_vibes.web.routes import home, imports, mappings, pantry, plans, recipes
 
 # CSP for the read-only UI:
 #   * default-src 'self' — block all cross-origin loads not explicitly allowed.
@@ -126,6 +126,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(home.router)
     app.include_router(recipes.router)
+    app.include_router(imports.router)
     app.include_router(pantry.router)
     app.include_router(plans.router)
     app.include_router(mappings.router)

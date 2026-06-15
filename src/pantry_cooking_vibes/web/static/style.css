@@ -14,6 +14,7 @@
   --hl: #ead7a2;
   --dim: #d9d2bf;
   --good: #8a9a6a;
+  --good-soft: #d8e0c4;     /* light green fill for the import 'ready' status */
   --danger: #b23b3b;
   /* Derived tones promoted out of one-off hexes so the warm sketch palette has a
      single source of truth. accent-ink/hl-ink are the dark text colors that clear
@@ -1858,3 +1859,95 @@ pre.instructions {
   }
   .recipe-edit-form .btn-row { grid-column: 1 / -1; }
 }
+
+/* ---- URL import ---- */
+/* List header carries its title and the import CTA on one line, wrapping the
+   button under the title on narrow screens. */
+.screen-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.screen-head h1 { margin-bottom: 4px; }
+.screen-head .screen-sub { margin-bottom: 0; }
+.import-cta { white-space: nowrap; flex-shrink: 0; }
+
+.import-note { max-width: 640px; margin-top: 22px; }
+.import-note p { margin: 0 0 8px; }
+.import-note p:last-child { margin-bottom: 0; }
+
+/* Quiet maintenance action sharing the home glance strip with the count links:
+   discoverable, but not competing with the cook-now decision below it. */
+.glance-action { white-space: nowrap; }
+
+/* ===========================================================================
+   Import inbox (#12): batch staging + triage table
+   =========================================================================== */
+/* Start-a-batch form (also the inbox empty state). */
+.import-batch-form { max-width: 680px; }
+.ib-field { display: block; font-weight: 700; margin-bottom: 4px; }
+.ib-field textarea, .ib-field input[type="file"] { display: block; width: 100%; margin-top: 6px; font: inherit; }
+.ib-field textarea { resize: vertical; }
+.ib-field .field-hint { display: block; font-weight: 400; font-size: .8rem; color: var(--ink-soft); margin-top: 6px; }
+.ib-or { display: flex; align-items: center; text-align: center; color: var(--ink-soft); font-size: .85rem; margin: 14px 0; }
+.ib-or::before, .ib-or::after { content: ""; flex: 1; border-top: 1.5px dashed var(--line-soft); }
+.ib-or span { padding: 0 12px; }
+.import-batch-form .btn-row { margin-top: 6px; }
+
+/* Header: title + provenance, with the new-import action on the right. */
+.ib-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+.ib-provenance { font-size: 14px; color: var(--ink-soft); margin: 2px 0 0; }
+.pill-dashed { font-family: inherit; font-size: 14px; background: var(--paper); color: var(--ink); border: 2px dashed var(--line); border-radius: 999px; padding: 5px 14px; white-space: nowrap; box-shadow: none; }
+
+/* Filter bar: search + count-bearing pills (no stat tiles). */
+.ib-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--paper); border: 2px solid var(--line); border-radius: 10px; box-shadow: 2px 2px 0 var(--line); padding: 8px 10px; margin: 14px 0 12px; }
+.ib-search { flex: 1; min-width: 180px; margin: 0; }
+.ib-search input { width: 100%; }
+.ib-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.ib-pill { font-size: 14px; border: 2px solid var(--line-soft); border-radius: 999px; padding: 3px 12px; background: var(--paper); color: var(--ink); box-shadow: 1px 1px 0 var(--line-soft); white-space: nowrap; }
+.ib-pill.on { background: var(--ink); color: var(--paper); border-color: var(--line); }
+.ib-pill .ct { opacity: .8; margin-left: 4px; font-weight: 700; }
+
+/* Bulk bar: states the action set explicitly (no margin-note selection model). */
+.ib-bulkbar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; background: var(--hl); border: 2px solid var(--line); border-radius: 10px; box-shadow: 3px 3px 0 var(--line); padding: 10px 14px; margin-bottom: 14px; }
+.ib-selinfo { font-weight: 700; }
+.ib-sub { font-size: 13px; color: var(--ink-soft); }
+.ib-spacer { flex: 1; }
+.ib-bulkbar .btn.danger { border: 2px dashed var(--danger); color: var(--danger); background: var(--paper); box-shadow: none; }
+.ib-bulkbar .btn.danger:hover { background: var(--danger); color: var(--paper); }
+
+/* The triage table. */
+.ib-panel { background: var(--paper); border: 2px solid var(--line); border-radius: 10px; box-shadow: 2px 2px 0 var(--line); overflow-x: auto; }
+.ib-table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 720px; }
+.ib-table thead th { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--ink-soft); text-align: left; background: var(--paper-2); padding: 9px 12px; border-bottom: 2px solid var(--line); font-weight: 400; }
+.ib-table thead th.c, .ib-table tbody td.c { text-align: center; }
+.ib-table tbody td { padding: 8px 12px; border-bottom: 1.5px dashed var(--line-soft); vertical-align: middle; }
+.ib-table tbody tr:last-child td { border-bottom: 0; }
+.ib-table tbody tr.ib-dis { opacity: .6; }
+.ib-table .muted { color: var(--ink-faint); }
+.ib-cb-off { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line-soft); border-radius: 4px; background: var(--dim); }
+.ib-thumb { width: 38px; height: 38px; border-radius: 7px; object-fit: cover; border: 2px solid var(--line); display: inline-flex; align-items: center; justify-content: center; background: var(--dim); }
+.ib-thumb.placeholder { font-size: 17px; }
+.ib-title { font-weight: 700; }
+.ib-count { display: inline-block; min-width: 22px; font-size: 13px; color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--line-soft); border-radius: 999px; padding: 1px 8px; }
+
+/* Per-status color: ready green, review amber, dup neutral gray, failed red. */
+.ib-status { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 11px; display: inline-block; border: 2px solid transparent; white-space: nowrap; }
+.ib-status.ready  { background: var(--good-soft); color: var(--good-line); border-color: var(--good); }
+.ib-status.review { background: var(--hl); color: var(--ink); border-color: var(--hl-line); }
+.ib-status.dup    { background: var(--paper-2); color: var(--ink-soft); border-color: var(--line-soft); }
+.ib-status.failed { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+.ib-status.saved  { background: var(--ink); color: var(--paper); }
+.ib-replace { display: inline-block; margin-left: 8px; font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.ib-open { font-size: 13px; border: 2px dashed var(--line-soft); border-radius: 999px; padding: 3px 12px; color: var(--ink-soft); white-space: nowrap; }
+.ib-open:hover { border-color: var(--accent); color: var(--ink); }
+
+.ib-resultline { font-size: 13px; color: var(--ink-soft); padding: 13px 4px 9px; }
+.ib-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 4px; }
+.ib-pager .pg { font-size: 14px; border: 2px solid var(--line-soft); border-radius: 999px; padding: 3px 12px; background: var(--paper); color: var(--ink-soft); box-shadow: 1px 1px 0 var(--line-soft); }
+.ib-pager .pg.cur { background: var(--ink); color: var(--paper); border-color: var(--line); }
+.ib-pager .gap { color: var(--ink-faint); padding: 0 2px; }
+.ib-safenote { font-size: 13px; color: var(--ink-soft); padding: 12px 4px 0; }
+.ib-fix-reason { font-size: 14px; color: var(--ink-soft); background: var(--hl-soft); border: 1.5px solid var(--hl-line); border-radius: 6px; padding: 6px 10px; max-width: 640px; }

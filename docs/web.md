@@ -1,10 +1,14 @@
 # Web UI (FastAPI)
 
-Read-mostly browse UI served by `uvicorn`. Only the pantry routes write to
-the DB; everything else (recipes, plans, shopping) is read-only from the
-user's perspective. Favorites are the one exception — they write to
-`recipe_favorites` but still live under the otherwise-read-only recipes
-surface.
+Read-mostly browse UI served by `uvicorn`. The pantry routes write to the DB;
+plans and shopping are read-only from the user's perspective. The recipes
+surface is mostly read-only but favorites (`recipe_favorites`) and
+editing/deleting a recipe write. Adding recipes is funneled through the **import
+inbox** (`/imports`, issue #12): pasted URLs and uploaded JSON-LD files are
+parsed into a staging area (`import_batches` / `import_items`) and triaged by
+status before any are *saved* (promoted) into `recipes`. The old single-URL page
+`/recipes/import` now 307-redirects to `/imports/new`. See `docs/importers.md`
+for the staging model.
 
 ## Routes
 
@@ -13,8 +17,16 @@ surface.
 | GET    | `/`                            | `routes/home.py::home`               | no            |
 | GET    | `/static/*`                    | `StaticFiles`                        | no            |
 | GET    | `/recipes`                     | `recipes.py::list_recipes`           | no            |
+| GET    | `/recipes/import`              | `recipes.py::import_recipe_redirect` (307 → `/imports/new`) | no |
 | GET    | `/recipes/{id}`                | `recipes.py::recipe_detail`          | no            |
 | POST   | `/recipes/{id}/favorite`       | `recipes.py::toggle_favorite`        | `recipe_favorites` |
+| GET    | `/imports`                     | `imports.py::imports_home` (→ latest batch or start) | no |
+| GET    | `/imports/new`                 | `imports.py::new_batch_form`         | no            |
+| POST   | `/imports`                     | `imports.py::create_batch`           | `import_batches`, `import_items` |
+| GET    | `/imports/{id}`                | `imports.py::batch_inbox`            | no            |
+| POST   | `/imports/{id}/save`           | `imports.py::save_or_discard`        | `recipes` (save) / `import_items` (discard); deletes the batch when emptied |
+| GET    | `/imports/items/{id}/edit`     | `imports.py::edit_item_form`         | no            |
+| POST   | `/imports/items/{id}/edit`     | `imports.py::edit_item_submit`       | `import_items` |
 | GET    | `/pantry`                      | `pantry.py::pantry_page`             | no            |
 | POST   | `/pantry/add`                  | `pantry.py::pantry_add`              | `pantry`      |
 | POST   | `/pantry/{id}/delete`          | `pantry.py::pantry_delete`           | `pantry`      |

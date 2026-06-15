@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set active_nav = 'imports' %}
+{% block title %}Import recipes{% endblock %}
+{% block content %}
+<h1 class="detail-title">Import recipes</h1>
+<p class="screen-sub">Paste recipe links or drop in a JSON-LD file. We'll parse them into an inbox where you can review what came through before any of it joins your library.</p>
+
+{% if notice %}<div class="flash ok">{{ notice }}</div>{% endif %}
+{% if error %}
+<p class="form-error" role="alert">{{ error }}</p>
+{% endif %}
+
+<form class="import-batch-form" method="post" action="/imports" enctype="multipart/form-data">
+  <label class="ib-field">
+    Recipe URLs
+    <textarea name="urls" rows="6" spellcheck="false"
+              placeholder="https://www.example.com/best-roast-chicken&#10;https://www.example.com/weeknight-pasta"></textarea>
+    <span class="field-hint">One per line. Works on sites that publish schema.org recipe data, which most major cooking sites do.</span>
+  </label>
+
+  <div class="ib-or" aria-hidden="true"><span>and / or</span></div>
+
+  <label class="ib-field">
+    JSON-LD file
+    <input type="file" name="file" accept=".json,.jsonld,application/ld+json,application/json">
+    <span class="field-hint">A schema.org JSON-LD export (a single recipe, an array, or a <code>@graph</code>).</span>
+  </label>
+
+  <div class="btn-row">
+    <button type="submit" class="btn primary">Parse into inbox</button>
+  </div>
+</form>
+
+<aside class="import-note box pad soft">
+  <p>Nothing is saved yet. Parsing reads each page's structured recipe data and stages the results; you choose what to keep from the inbox.</p>
+  <p class="hint">Importing a large scraped batch from the terminal instead? Use <code>uv run meal-cli ingest &lt;file.jsonl&gt;</code>.</p>
+</aside>
+{% endblock %}

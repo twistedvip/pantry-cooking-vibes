@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_nav = 'imports' %}
+{% block title %}Fix {{ item.name or 'item' }}{% endblock %}
+{% block content %}
+<p class="breadcrumbs"><a href="/imports/{{ item.batch_id }}">← Import inbox</a></p>
+
+<h1 class="detail-title">Fix before saving</h1>
+<p class="screen-sub">Edit this staged recipe, then it goes back to the inbox. Nothing is saved to your library until you save it there.</p>
+
+{% if error %}
+<p class="form-error" role="alert">{{ error }}</p>
+{% endif %}
+
+{% if item.failure_reason %}
+<p class="ib-fix-reason">Flagged as failed: {{ item.failure_reason }}.</p>
+{% elif item.review_reason %}
+<p class="ib-fix-reason">Flagged for review: {{ item.review_reason }}.</p>
+{% endif %}
+
+<form class="recipe-edit-form" method="post" action="/imports/items/{{ item.id }}/edit">
+  <div class="edit-col">
+    <label>
+      Name
+      <input type="text" name="name" value="{{ form.name }}" required maxlength="300">
+    </label>
+
+    <div class="field-row">
+      <label>
+        Cooking time (min)
+        <input type="number" name="cooking_time_min" value="{{ form.cooking_time_min }}" min="0" step="1">
+      </label>
+      <label>
+        Servings
+        <input type="number" name="servings" value="{{ form.servings }}" min="1" step="1">
+      </label>
+    </div>
+
+    <label>
+      Picture URL
+      <input type="text" name="image_url" value="{{ form.image_url }}" maxlength="2000"
+             placeholder="https://…" inputmode="url">
+      <span class="field-hint">Required to save: a recipe with no picture can't enter the library.</span>
+    </label>
+
+    <label>
+      Tags
+      <textarea name="tags" rows="3" placeholder="quick, vegetarian">{{ form.tags }}</textarea>
+      <span class="field-hint">Comma-separated; saved lowercase.</span>
+    </label>
+  </div>
+
+  <div class="edit-col">
+    <label>
+      Ingredients
+      <textarea name="ingredients" rows="10" spellcheck="false">{{ form.ingredients }}</textarea>
+      <span class="field-hint">One ingredient per line.</span>
+    </label>
+
+    <label>
+      Steps
+      <textarea name="instructions" rows="12">{{ form.instructions }}</textarea>
+      <span class="field-hint">One step per line.</span>
+    </label>
+  </div>
+
+  <div class="btn-row">
+    <button type="submit" class="btn primary">Save changes</button>
+    <a class="btn ghost" href="/imports/{{ item.batch_id }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
