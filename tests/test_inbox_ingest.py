@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from pantry_cooking_vibes.db import connect
 from pantry_cooking_vibes.importers import import_inbox as inbox, inbox_ingest
 
@@ -163,6 +165,43 @@ def test_build_batch_from_urls(db_path, monkeypatch):
     assert batch is not None
     assert batch["label"] == "2 URLs"
     assert batch["counts"]["ready"] == 2
+
+
+def test_build_batch_dedups_pasted_urls(db_path, monkeypatch):
+    """The same URL pasted twice is fetched and staged once."""
+    monkeypatch.setattr(
+        inbox_ingest.url_import,
+        "fetch_html",
+        lambda url: _html(_recipe_jsonld(name="Same", url="https://e.com/same")),
+    )
+    bid = inbox_ingest.build_batch(
+        urls=["https://e.com/same", "https://e.com/same"], db_path=db_path
+    )
+    batch = inbox.get_batch(bid, db_path=db_path)
+    assert batch is not None
+    assert batch["counts"]["ready"] == 1
+
+
+def test_build_batch_dedups_file_entities(db_path):
+    """Two file entities sharing a URL collapse to one staged item."""
+    text = json.dumps(
+        [
+            _recipe_jsonld(name="Dup", url="https://e.com/d"),
+            _recipe_jsonld(name="Dup again", url="https://e.com/d"),
+        ]
+    )
+    bid = inbox_ingest.build_batch(file_text=text, db_path=db_path)
+    batch = inbox.get_batch(bid, db_path=db_path)
+    assert batch is not None
+    assert batch["counts"]["all"] == 1
+
+
+def test_build_batch_rejects_oversized(db_path, monkeypatch):
+    """A batch over MAX_BATCH_ITEMS is rejected before any URL fetch."""
+    monkeypatch.setattr(inbox_ingest, "MAX_BATCH_ITEMS", 2)
+    text = json.dumps([_recipe_jsonld(name=f"R{i}", url=f"https://e.com/{i}") for i in range(3)])
+    with pytest.raises(ValueError, match="import inbox handles"):
+        inbox_ingest.build_batch(file_text=text, db_path=db_path)
 
 
 def test_build_batch_dedups_against_library(db_path, monkeypatch):

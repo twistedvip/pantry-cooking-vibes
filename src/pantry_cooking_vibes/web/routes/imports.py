@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 
 from pantry_cooking_vibes.importers import import_inbox as inbox, inbox_ingest
 from pantry_cooking_vibes.web.deps import get_db_path, render, safe_redirect
-from pantry_cooking_vibes.web.routes.recipes import _page_window
+from pantry_cooking_vibes.web.routes.recipes import _page_window, _parse_optional_int
 
 log = logging.getLogger(__name__)
 
@@ -105,9 +105,15 @@ def create_batch(
         response.status_code = 422
         return response
 
-    batch_id = inbox_ingest.build_batch(
-        urls=url_list, file_text=file_text, file_name=file_name, db_path=db_path
-    )
+    try:
+        batch_id = inbox_ingest.build_batch(
+            urls=url_list, file_text=file_text, file_name=file_name, db_path=db_path
+        )
+    except ValueError as e:
+        # Over the per-batch cap (inbox_ingest.MAX_BATCH_ITEMS).
+        response = render(request, "imports/empty.html", {"error": str(e)})
+        response.status_code = 422
+        return response
     return RedirectResponse(url=f"/imports/{int(batch_id)}", status_code=303)
 
 
@@ -280,25 +286,34 @@ def edit_item_submit(
     if item is None:
         raise HTTPException(status_code=404, detail=f"Import item {item_id} not found")
 
+    # Reject non-numeric time/servings the same way the recipe edit form does,
+    # rather than silently coercing a typo to blank.
     error: str | None = None
-    time_val = _opt_int(cooking_time_min)
-    servings_val = _opt_int(servings)
+    time_val: int | None = None
+    servings_val: int | None = None
     try:
-        inbox.update_item(
-            item_id,
-            name=name,
-            cooking_time_min=time_val,
-            servings=servings_val,
-            image_url=image_url or None,
-            instructions=instructions.splitlines(),
-            tags=tags.split(","),
-            ingredients=ingredients.splitlines(),
-            db_path=db_path,
-        )
-    except ValueError as e:
-        error = str(e)
-    else:
-        return RedirectResponse(url=f"/imports/{int(item['batch_id'])}", status_code=303)
+        time_val = _parse_optional_int(cooking_time_min, "cooking time", min_value=0)
+        servings_val = _parse_optional_int(servings, "servings", min_value=1)
+    except HTTPException as e:
+        error = str(e.detail)
+
+    if error is None:
+        try:
+            inbox.update_item(
+                item_id,
+                name=name,
+                cooking_time_min=time_val,
+                servings=servings_val,
+                image_url=image_url or None,
+                instructions=instructions.splitlines(),
+                tags=tags.split(","),
+                ingredients=ingredients.splitlines(),
+                db_path=db_path,
+            )
+        except ValueError as e:
+            error = str(e)
+        else:
+            return RedirectResponse(url=f"/imports/{int(item['batch_id'])}", status_code=303)
 
     response = render(
         request,
@@ -319,13 +334,3 @@ def edit_item_submit(
     )
     response.status_code = 422
     return response
-
-
-def _opt_int(raw: str) -> int | None:
-    raw = raw.strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None

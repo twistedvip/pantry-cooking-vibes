@@ -211,6 +211,29 @@ def test_edit_item_rescues_failed(client: TestClient, db_path):
     assert got is not None and got["status"] == "ready"
 
 
+def test_edit_item_rejects_non_numeric_time(client: TestClient, db_path):
+    """A typo'd cooking time is rejected (422), not silently blanked."""
+    batch_id = _seed_batch(db_path)
+    item = inbox.list_items(batch_id, status="ready", db_path=db_path)["items"][0]
+    r = client.post(
+        f"/imports/items/{item['id']}/edit",
+        data={"name": "Fine", "cooking_time_min": "abc", "image_url": "https://e.com/x.jpg"},
+    )
+    assert r.status_code == 422
+
+
+def test_create_batch_over_cap_is_422(client: TestClient, db_path, monkeypatch):
+    monkeypatch.setattr(inbox_ingest, "MAX_BATCH_ITEMS", 2)
+    text = json.dumps([_recipe(f"R{i}", f"https://e.com/{i}") for i in range(3)])
+    r = client.post(
+        "/imports",
+        data={"urls": ""},
+        files={"file": ("big.jsonld", text, "application/json")},
+    )
+    assert r.status_code == 422
+    assert "import inbox handles" in r.text
+
+
 def test_edit_item_blank_name_is_422(client: TestClient, db_path):
     batch_id = _seed_batch(db_path)
     item = inbox.list_items(batch_id, status="ready", db_path=db_path)["items"][0]

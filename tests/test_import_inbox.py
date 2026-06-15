@@ -272,6 +272,16 @@ def test_discard_leaves_saved_items_alone(db_path):
     assert still_saved is not None and still_saved["status"] == "saved"
 
 
+def test_discard_items_chunks_under_sql_var_limit(db_path, monkeypatch):
+    """discard_items chunks ids so a large 'discard all' can't exceed SQLite's
+    bound-parameter ceiling. Forced here with a tiny chunk size."""
+    monkeypatch.setattr(inbox, "_MAX_SQL_VARS", 2)
+    b = inbox.create_batch("b", db_path=db_path)
+    ids = [inbox.add_item(b, _ready_item(f"r{i}", f"u{i}"), db_path=db_path) for i in range(5)]
+    assert inbox.discard_items(ids, db_path=db_path) == 5
+    assert inbox.status_counts(b, db_path=db_path)["discarded"] == 5
+
+
 def test_discard_all_failed(db_path):
     b = inbox.create_batch("b", db_path=db_path)
     inbox.add_item(b, _ready_item("ok", "u1"), db_path=db_path)

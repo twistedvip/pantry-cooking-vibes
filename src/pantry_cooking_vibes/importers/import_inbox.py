@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from pantry_cooking_vibes.db import DB_PATH, connect
+from pantry_cooking_vibes.importers.normalize import _build_choice_map, _load_index
 from pantry_cooking_vibes.importers.url_import import (
     _enqueue_ingredients,
     _load_canonical_map,
@@ -34,9 +35,11 @@ from pantry_cooking_vibes.importers.url_import import (
 # The four buckets a user triages; 'all' is their union. 'saved'/'discarded'
 # are terminal and excluded from the pills (surfaced in the batch summary).
 UNRESOLVED_STATUSES: tuple[str, ...] = ("ready", "review", "dup", "failed")
-# Saveable buckets: a failed item has nothing to promote; dups need an explicit
-# replace opt-in (handled in save_items), so they're not auto-saved.
-SAVEABLE_STATUSES: frozenset[str] = frozenset({"ready", "review"})
+
+# Cap on bound parameters per statement. SQLite's SQLITE_MAX_VARIABLE_NUMBER is
+# 999 on older builds, so an `IN (?, ?, ...)` over a large batch must be chunked
+# below this or it raises "too many SQL variables".
+_MAX_SQL_VARS = 900
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +111,10 @@ def finish_batch(batch_id: int, *, db_path: Path | None = None) -> None:
 
 
 def archive_batch(batch_id: int, *, db_path: Path | None = None) -> None:
+    """Hide a batch from the landing query without deleting it. The data-layer
+    archive primitive: ``latest_batch_id`` skips archived batches. Completed
+    batches are deleted (see ``delete_batch``); archiving is the non-destructive
+    alternative kept available for callers that want to keep a batch around."""
     with connect(db_path or DB_PATH) as conn:
         conn.execute("UPDATE import_batches SET status = 'archived' WHERE id = ?", (batch_id,))
 
@@ -352,6 +359,10 @@ def save_items(
     recipe_ids: list[int] = []
     with connect(db_path or DB_PATH) as conn:
         canonical_map = _load_canonical_map(conn)
+        # Build the canonical fuzzy-match index ONCE for the whole bulk save and
+        # reuse it for every item. _enqueue_ingredients would otherwise reload
+        # and rebuild it per item, making "save all" O(N) full index builds.
+        choices, choice_to_id = _build_choice_map(_load_index(conn))
         for item_id in item_ids:
             row = conn.execute("SELECT * FROM import_items WHERE id = ?", (item_id,)).fetchone()
             if row is None or row["status"] in ("saved", "discarded", "failed"):
@@ -361,7 +372,7 @@ def save_items(
             if is_dup and item_id not in replace:
                 skipped += 1
                 continue
-            recipe_id = _promote(conn, row, canonical_map)
+            recipe_id = _promote(conn, row, canonical_map, choices, choice_to_id)
             conn.execute(
                 "UPDATE import_items SET status = 'saved', saved_recipe_id = ? WHERE id = ?",
                 (recipe_id, item_id),
@@ -428,28 +439,44 @@ def delete_batch(batch_id: int, *, db_path: Path | None = None) -> None:
 def discard_items(item_ids: list[int], *, db_path: Path | None = None) -> int:
     """Mark items discarded (terminal). Already-saved items are left alone.
 
-    Returns the number actually discarded.
+    Returns the number actually discarded. The id list is chunked under the
+    SQLite bound-parameter limit so 'discard all' on a large batch can't blow
+    the ``IN (...)`` clause.
     """
     if not item_ids:
         return 0
-    placeholders = ",".join("?" for _ in item_ids)
+    discarded = 0
     with connect(db_path or DB_PATH) as conn:
-        cur = conn.execute(
-            # S608: placeholders is a comma-joined run of ? binds, no user text.
-            f"UPDATE import_items SET status = 'discarded' "  # noqa: S608
-            f"WHERE id IN ({placeholders}) AND status NOT IN ('saved', 'discarded')",
-            list(item_ids),
-        )
-        return cur.rowcount
+        for start in range(0, len(item_ids), _MAX_SQL_VARS):
+            chunk = item_ids[start : start + _MAX_SQL_VARS]
+            placeholders = ",".join("?" for _ in chunk)
+            cur = conn.execute(
+                # S608: placeholders is a comma-joined run of ? binds, no user text.
+                f"UPDATE import_items SET status = 'discarded' "  # noqa: S608
+                f"WHERE id IN ({placeholders}) AND status NOT IN ('saved', 'discarded')",
+                list(chunk),
+            )
+            discarded += cur.rowcount
+    return discarded
 
 
-def _promote(conn: sqlite3.Connection, row: sqlite3.Row, canonical_map: dict[str, int]) -> int:
+def _promote(
+    conn: sqlite3.Connection,
+    row: sqlite3.Row,
+    canonical_map: dict[str, int],
+    choices: list[str],
+    choice_to_id: dict[str, int],
+) -> int:
     """Copy one staged item into recipes (+ tags, ingredients), UPSERT on
     (source, source_id). Reuses url_import's ingredient normalizer so a saved
-    recipe maps to canonicals exactly as a single URL import would."""
+    recipe maps to canonicals exactly as a single URL import would. The prebuilt
+    ``choices`` / ``choice_to_id`` index is passed in so a bulk save reuses one
+    index instead of rebuilding it per item."""
     ingredients = json.loads(row["ingredients_json"] or "[]")
     tags = json.loads(row["tags_json"] or "[]")
-    canonical_map = _enqueue_ingredients(conn, ingredients, canonical_map)
+    canonical_map = _enqueue_ingredients(
+        conn, ingredients, canonical_map, choices=choices, choice_to_id=choice_to_id
+    )
     recipe_id = _upsert_recipe_row(conn, row)
     _replace_tags(conn, recipe_id, tags)
     _replace_ingredients(conn, recipe_id, ingredients, canonical_map)

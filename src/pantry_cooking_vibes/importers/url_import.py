@@ -380,12 +380,20 @@ def _enqueue_ingredients(
     conn: sqlite3.Connection,
     ingredients: list[str],
     canonical_map: dict[str, int],
+    *,
+    choices: list[str] | None = None,
+    choice_to_id: dict[str, int] | None = None,
 ) -> dict[str, int]:
     """Run the normalizer on each ingredient string and upsert into the
     ``ingredient_mapping_queue`` under ``source='url_import'``. Mirrors the
     HR-products flow so URL-imported recipes don't silently land with
     ``canonical_id=NULL``. Returns an updated map including newly
-    auto-approved (or proposed) hits."""
+    auto-approved (or proposed) hits.
+
+    Pass a prebuilt ``choices`` / ``choice_to_id`` (from ``_load_index`` +
+    ``_build_choice_map``) to reuse one index across many calls; otherwise it's
+    built here per call.
+    """
     from pantry_cooking_vibes.importers.normalize import (
         _build_choice_map,
         _load_index,
@@ -398,8 +406,8 @@ def _enqueue_ingredients(
     if not distinct:
         return out
 
-    index = _load_index(conn)
-    choices, choice_to_id = _build_choice_map(index)
+    if choices is None or choice_to_id is None:
+        choices, choice_to_id = _build_choice_map(_load_index(conn))
     for text in distinct:
         if text in out:
             continue
