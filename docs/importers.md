@@ -16,6 +16,21 @@ The wire format for ingest is documented separately in
 [`jsonl_contract.md`](jsonl_contract.md). This page covers the
 *implementation* of each path and the plugin escape hatch.
 
+## Import inbox (web staging, issue #12)
+
+The web UI funnels every import through a **staging inbox** instead of writing
+straight to `recipes`. `importers/inbox_ingest.py` parses pasted URLs and
+uploaded JSON-LD files (reusing `url_import`'s fetch/extract/parse) into
+`import_items` rows, each classified `ready` / `review` / `dup` / `failed`.
+`importers/import_inbox.py` is the framework-free data layer (create/list/
+save/discard, all `db_path=`); **saving promotes** a staged item into `recipes`
+through the *same* normalizer `url_import` uses, so an inbox-saved recipe and a
+CLI URL import land identically. Staged recipes can't live in `recipes` (a
+duplicate would collide with the `(source, source_id)` UNIQUE constraint), which
+is why they wait in their own tables until saved. A batch is deleted once every
+item is resolved, so imports leave no history. The CLI (`import-url`, `ingest`)
+still writes to `recipes` directly; the inbox is the web path.
+
 ## JSONL ingest (`importers/jsonl_ingest.py`)
 
 ```

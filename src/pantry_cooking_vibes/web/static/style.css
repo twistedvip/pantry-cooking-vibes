@@ -1874,37 +1874,6 @@ pre.instructions {
 .screen-head .screen-sub { margin-bottom: 0; }
 .import-cta { white-space: nowrap; flex-shrink: 0; }
 
-.import-form { max-width: 640px; }
-.import-form > label {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-.import-form input[type="text"] {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-}
-.import-form .field-hint {
-  display: block;
-  font-weight: 400;
-  font-size: .8rem;
-  color: var(--ink-soft);
-  margin-top: 6px;
-}
-.import-form .btn-row { display: flex; gap: 10px; align-items: center; }
-/* Error state: the message names the problem; the field border points at where
-   to fix it. At rest it reads danger-red; on focus the shared accent ring wins. */
-.import-form input[aria-invalid="true"] {
-  border-color: var(--danger);
-  box-shadow: 1px 1px 0 var(--danger);
-}
-/* Pending state set by import.js once the (network-bound) import is in flight,
-   so the button reads as working rather than frozen. */
-.import-form button[type="submit"]:disabled {
-  opacity: .65;
-  cursor: progress;
-}
 .import-note { max-width: 640px; margin-top: 22px; }
 .import-note p { margin: 0 0 8px; }
 .import-note p:last-child { margin-bottom: 0; }

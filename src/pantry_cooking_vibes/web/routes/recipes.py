@@ -8,17 +8,10 @@ import math
 import sqlite3
 from pathlib import Path
 
-import requests
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse
 
 from pantry_cooking_vibes.dates import current_sunday, is_sunday, is_week_halfway_over, next_sunday
-from pantry_cooking_vibes.importers.url_import import (
-    RecipeMissingImageError,
-    RecipeNotFoundError,
-    UnsafeURLError,
-    import_url,
-)
 from pantry_cooking_vibes.mcp_server import tools
 from pantry_cooking_vibes.web.deps import get_db_path, render, safe_redirect
 
@@ -237,66 +230,17 @@ def list_recipes(
 
 
 # ---------------------------------------------------------------------------
-# URL import — the one web path that creates a recipe.
-#
-# Delegates to the same importer the CLI uses (import_url), so the web and
-# terminal paths share one schema.org parser, SSRF guard, and ingredient-queue
-# behavior. import_url fetches the page itself and re-validates every redirect
-# hop in _assert_safe_fetch_url, so a user-supplied URL is safe to hand straight
-# in. Registered above /{recipe_id} so the literal "import" segment is never
-# swallowed by the int path param.
+# Legacy single-URL import. Superseded by the import inbox (/imports), which
+# funnels every import — a single pasted URL included — through staging so it
+# gets the same dup/review triage. Kept as a redirect so old links and bookmarks
+# still land somewhere useful. Registered above /{recipe_id} so the literal
+# "import" segment is never swallowed by the int path param.
 # ---------------------------------------------------------------------------
 
 
-def _render_import_form(
-    request: Request, *, url: str, error: str | None, status_code: int = 200
-) -> Response:
-    response = render(request, "recipes/import.html", {"url": url, "error": error})
-    response.status_code = status_code
-    return response
-
-
 @router.get("/import")
-def import_recipe_form(request: Request) -> object:
-    return _render_import_form(request, url="", error=None)
-
-
-@router.post("/import")
-def import_recipe_submit(
-    request: Request,
-    url: str = Form(""),
-    db_path: Path = Depends(get_db_path),
-) -> object:
-    """Import a recipe from a pasted URL; on failure re-render the form with a
-    plain-language reason and the URL echoed back so it can be corrected."""
-    url = url.strip()
-    if not url:
-        return _render_import_form(
-            request, url=url, error="Enter a recipe URL to import.", status_code=422
-        )
-
-    try:
-        stats = import_url(url, db_path=db_path, quiet=True)
-    except RecipeNotFoundError:
-        error = (
-            "No recipe data found on that page. The importer reads the schema.org "
-            "recipe markup most cooking sites publish — pages without it (many "
-            "blogs and roundups) can't be imported."
-        )
-    except RecipeMissingImageError:
-        error = "That page has a recipe but no photo, so it wasn't imported."
-    except UnsafeURLError:
-        error = "That address can't be fetched. Use a public http(s) recipe URL."
-    except requests.RequestException:
-        error = "Couldn't reach that page. Check the URL and try again."
-    else:
-        # int() keeps recipe_id provably an int for CodeQL's url-redirection
-        # dataflow (it already is one, straight from the importer).
-        return RedirectResponse(
-            url=f"/recipes/{int(stats['recipe_id'])}?imported=1", status_code=303
-        )
-
-    return _render_import_form(request, url=url, error=error, status_code=422)
+def import_recipe_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/imports/new", status_code=307)
 
 
 # Display order, label, and unit for the compact macro dict stored in
@@ -386,7 +330,6 @@ def recipe_detail(
     request: Request,
     recipe_id: int,
     saved: str = Query("", description="Set to 1 to flash a save confirmation"),
-    imported: str = Query("", description="Set to 1 to flash an import confirmation"),
     db_path: Path = Depends(get_db_path),
 ) -> object:
     recipe = tools.get_recipe(recipe_id, db_path=db_path)
@@ -407,7 +350,6 @@ def recipe_detail(
             "next_week": next_week,
             "suggest_next_week": suggest_next_week,
             "saved": saved == "1",
-            "imported": imported == "1",
         },
     )
 

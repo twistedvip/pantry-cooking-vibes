@@ -1831,97 +1831,25 @@ def test_recipe_edit_xss_payloads_are_escaped_everywhere(client: TestClient, see
         assert "&lt;script&gt;" in page  # escaped, not dropped
 
 
-# ---------- URL import (issue #12) ----------
-
-# A minimal schema.org Recipe page the importer can parse. Tests monkeypatch
-# fetch_html to return this, so the real import_url path writes to the seeded
-# test DB exactly as it would in production — no network, full wiring.
-_IMPORT_HTML = (
-    '<html><head><script type="application/ld+json">'
-    '{"@context":"https://schema.org","@type":"Recipe","name":"Test Import Stew",'
-    '"image":"https://example.com/stew.jpg",'
-    '"recipeIngredient":["2 carrots","1 onion"],'
-    '"recipeInstructions":"Chop everything. Simmer until tender.",'
-    '"totalTime":"PT45M","recipeYield":"4"}'
-    "</script></head><body></body></html>"
-)
+# ---------- import entry points (funnel through /imports, issue #12) ----------
+# Every import now goes through the inbox at /imports; the standalone single-URL
+# page was retired. Its behavior lives in tests/test_imports_web.py.
 
 
-def test_import_form_renders(client: TestClient):
-    r = client.get("/recipes/import")
-    assert r.status_code == 200
-    assert 'action="/recipes/import"' in r.text
-    assert 'name="url"' in r.text
-    # Progressive-enhancement script wires the "Importing…" pending state.
-    assert "import.js" in r.text
+def test_legacy_import_path_redirects_to_inbox(client: TestClient):
+    r = client.get("/recipes/import", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers["location"] == "/imports/new"
 
 
-def test_recipes_list_links_to_import(client: TestClient):
+def test_recipes_list_links_to_inbox(client: TestClient):
     r = client.get("/recipes")
     assert r.status_code == 200
-    assert 'href="/recipes/import"' in r.text
+    assert 'href="/imports"' in r.text
 
 
-def test_home_links_to_import(client: TestClient):
-    """The populated home surfaces an import entry point, not just the list."""
+def test_home_links_to_inbox(client: TestClient):
+    """The populated home surfaces the import inbox, not just the recipe list."""
     r = client.get("/")
     assert r.status_code == 200
-    assert 'href="/recipes/import"' in r.text
-
-
-def test_import_url_creates_recipe_and_redirects(client: TestClient, monkeypatch):
-    import pantry_cooking_vibes.importers.url_import as url_import
-
-    monkeypatch.setattr(url_import, "fetch_html", lambda url, **kw: _IMPORT_HTML)
-    r = client.post(
-        "/recipes/import",
-        data={"url": "https://example.com/stew"},
-        follow_redirects=False,
-    )
-    assert r.status_code == 303
-    location = r.headers["location"]
-    assert location.startswith("/recipes/")
-    assert location.endswith("?imported=1")
-
-    # The imported recipe is browsable and flashes a confirmation.
-    detail = client.get(location)
-    assert detail.status_code == 200
-    assert "Test Import Stew" in detail.text
-    assert "Recipe imported" in detail.text
-
-
-def test_import_url_blank_shows_error(client: TestClient):
-    r = client.post("/recipes/import", data={"url": "   "})
-    assert r.status_code == 422
-    assert "Enter a recipe URL" in r.text
-
-
-def test_import_url_no_recipe_shows_friendly_error(client: TestClient, monkeypatch):
-    import pantry_cooking_vibes.importers.url_import as url_import
-
-    monkeypatch.setattr(
-        url_import, "fetch_html", lambda url, **kw: "<html><body>just an article</body></html>"
-    )
-    r = client.post("/recipes/import", data={"url": "https://example.com/nope"})
-    assert r.status_code == 422
-    assert "No recipe data found" in r.text
-    # The submitted URL is echoed back so the user can correct it.
-    assert "https://example.com/nope" in r.text
-    # The field is flagged invalid so the error border (and screen readers) point
-    # at where to fix it, not just the banner.
-    assert 'aria-invalid="true"' in r.text
-
-
-def test_import_url_network_failure_shows_friendly_error(client: TestClient, monkeypatch):
-    import requests
-
-    import pantry_cooking_vibes.importers.url_import as url_import
-
-    def boom(url, **kw):
-        raise requests.ConnectionError("no route to host")
-
-    monkeypatch.setattr(url_import, "fetch_html", boom)
-    r = client.post("/recipes/import", data={"url": "https://example.com/down"})
-    assert r.status_code == 422
-    # The apostrophe is HTML-escaped by Jinja autoescape, so match the rest.
-    assert "reach that page" in r.text
+    assert 'href="/imports"' in r.text
